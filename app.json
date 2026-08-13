@@ -8,7 +8,8 @@
     "scheme": "vehicleservicelog",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.anonymous.vehicleServiceLog"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,7 +20,8 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.vehicleServiceLog"
     },
@@ -55,6 +57,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5d7adbf0-1519-4739-823b-7033f463f5ed"
+      }
+    },
+    "owner": "tahaakber"
   }
 }

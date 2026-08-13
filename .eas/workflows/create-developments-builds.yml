@@ -1,0 +1,20 @@
+name: Create Development Builds
+
+on:
+  push:
+    branches: ['Feature_A']
+
+jobs:
+  build_android:
+    name: Build Android Testing APK
+    type: build
+    params:
+      platform: android
+      profile: preview
+
+  build_ios:
+    name: Build iOS Testing App
+    type: build
+    params:
+      platform: ios
+      profile: preview
