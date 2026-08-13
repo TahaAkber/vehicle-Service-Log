@@ -4,6 +4,7 @@ import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -29,12 +30,26 @@ export const OdometerScanner: React.FC<OdometerScannerProps> = ({
   if (!permission.granted) {
     return (
       <View style={styles.centered}>
+        <View style={styles.permissionIcon}>
+          <Text style={styles.permissionIconText}>⌁</Text>
+        </View>
+        <Text style={styles.permissionTitle}>Camera access needed</Text>
         <Text style={styles.permissionText}>
           Speedometer photo ke liye camera access required hai.
         </Text>
-        <TouchableOpacity style={styles.btnPrimary} onPress={requestPermission}>
-          <Text style={styles.btnText}>Allow Camera</Text>
-        </TouchableOpacity>
+        <View style={styles.permissionActions}>
+          <TouchableOpacity style={styles.permissionCancel} onPress={onCancel}>
+            <Text style={styles.permissionCancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.btnPrimary}
+            onPress={permission.canAskAgain ? requestPermission : Linking.openSettings}
+          >
+            <Text style={styles.btnText}>
+              {permission.canAskAgain ? "Allow camera" : "Open settings"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -134,11 +149,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   permissionText: {
-    color: "#FFF",
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 24,
+    color: "#94A3B8",
+    lineHeight: 23,
   },
+  permissionIcon: { width: 62, height: 62, marginBottom: 16, borderRadius: 20, alignItems: "center", justifyContent: "center", backgroundColor: "#102A3E" },
+  permissionIconText: { color: "#52D6FF", fontSize: 32, fontWeight: "700" },
+  permissionTitle: { marginBottom: 8, color: "#FFFFFF", fontSize: 20, fontWeight: "800" },
+  permissionActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  permissionCancel: { minHeight: 46, paddingHorizontal: 20, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#1E293B" },
+  permissionCancelText: { color: "#CBD5E1", fontSize: 14, fontWeight: "700" },
   camera: {
     flex: 1,
   },
@@ -170,10 +192,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   btnPrimary: {
-    backgroundColor: "#00E676",
+    minHeight: 46,
+    backgroundColor: "#2F80ED",
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
   btnCapture: {
     backgroundColor: "#00E676",
