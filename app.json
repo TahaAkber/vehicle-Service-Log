@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "vehicle-Service-Log",
-    "slug": "vehicle-Service-Log",
+    "slug": "vehicle-service-logs",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
