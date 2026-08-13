@@ -1,13 +1,19 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import NetInfo from "@react-native-community/netinfo";
 import {
+  useCallback,
   createContext,
   createElement,
   type ReactNode,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+
+import { supabase } from "../../lib/supabase";
+import { useAuth } from "../../providers/AuthProvider";
 
 export type LogType = "oil" | "chain" | "fuel" | "service" | "odometer";
 export type OilCategory = "mineral" | "semi-synthetic" | "fully-synthetic" | "other";
@@ -75,6 +81,22 @@ export type VehicleInput = Pick<
 >;
 
 const STORAGE_KEY = "vehicle-service-log/garage-v1";
+const USER_STORAGE_PREFIX = "vehicle-service-log/user-garage-v2";
+
+export type SyncStatus = "offline" | "syncing" | "synced" | "pending" | "error";
+
+type GarageCache = {
+  garage: Garage;
+  updatedAt: string;
+  dirty: boolean;
+  lastSyncedAt?: string;
+};
+
+type RemoteGarage = {
+  garage: Garage;
+  client_updated_at: string;
+  updated_at: string;
+};
 
 const todayAtNoon = (daysAgo = 0) => {
   const date = new Date();
@@ -263,41 +285,247 @@ const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name
   };
 };
 
+const normalizeGarage = (garage: Garage): Garage => ({
+  activeVehicleId: garage.activeVehicleId,
+  vehicles: garage.vehicles.map((vehicle) => normalizeVehicle(vehicle)),
+});
+
+const parseCache = (stored: string | null): GarageCache | null => {
+  if (!stored) return null;
+  try {
+    const parsed = JSON.parse(stored) as Partial<GarageCache> & Partial<Garage>;
+    if (parsed.garage?.vehicles?.length) {
+      return {
+        garage: normalizeGarage(parsed.garage),
+        updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
+        dirty: Boolean(parsed.dirty),
+        lastSyncedAt: parsed.lastSyncedAt,
+      };
+    }
+    if (parsed.vehicles?.length && parsed.activeVehicleId) {
+      return {
+        garage: normalizeGarage(parsed as Garage),
+        updatedAt: new Date().toISOString(),
+        dirty: true,
+      };
+    }
+  } catch (error) {
+    console.warn("Could not parse local garage", error);
+  }
+  return null;
+};
+
+const asRemoteGarage = (value: unknown): RemoteGarage | null => {
+  const row = Array.isArray(value) ? value[0] : value;
+  if (!row || typeof row !== "object") return null;
+  const candidate = row as Partial<RemoteGarage>;
+  if (!candidate.garage?.vehicles?.length || !candidate.client_updated_at || !candidate.updated_at) {
+    return null;
+  }
+  return candidate as RemoteGarage;
+};
+
 function useVehicleStoreState() {
+  const { user } = useAuth();
+  const userId = user?.id;
   const [garage, setGarage] = useState<Garage>(defaultGarage);
   const [isLoading, setIsLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("pending");
+  const [isOnline, setIsOnline] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>();
+  const cacheRef = useRef<GarageCache | undefined>(undefined);
+  const syncingRef = useRef(false);
+  const rerunSyncRef = useRef(false);
+  const initializedRef = useRef(false);
+  const storageKey = userId ? `${USER_STORAGE_PREFIX}/${userId}` : undefined;
+
+  const persistCache = useCallback(async (cache: GarageCache) => {
+    if (!storageKey) return;
+    await AsyncStorage.setItem(storageKey, JSON.stringify(cache));
+  }, [storageKey]);
+
+  const applyCache = useCallback((cache: GarageCache) => {
+    cacheRef.current = cache;
+    setGarage(cache.garage);
+    setLastSyncedAt(cache.lastSyncedAt);
+    setSyncStatus(cache.dirty ? "pending" : "synced");
+  }, []);
+
+  const pullRemote = useCallback(async () => {
+    if (!userId) return null;
+    const { data, error } = await supabase
+      .from("garages")
+      .select("garage, client_updated_at, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw error;
+    return asRemoteGarage(data);
+  }, [userId]);
+
+  const syncNow = useCallback(async () => {
+    if (!userId || !storageKey || !initializedRef.current) return;
+    if (syncingRef.current) {
+      rerunSyncRef.current = true;
+      return;
+    }
+
+    const network = await NetInfo.fetch();
+    const online = Boolean(network.isConnected && network.isInternetReachable !== false);
+    setIsOnline(online);
+    if (!online) {
+      setSyncStatus("offline");
+      return;
+    }
+
+    syncingRef.current = true;
+    setSyncStatus("syncing");
+    try {
+      const local = cacheRef.current;
+      if (!local) return;
+
+      let remote: RemoteGarage | null;
+      if (local.dirty) {
+        const { data, error } = await supabase.rpc("sync_garage", {
+          p_garage: local.garage,
+          p_client_updated_at: local.updatedAt,
+        });
+        if (error) throw error;
+        remote = asRemoteGarage(data);
+      } else {
+        remote = await pullRemote();
+      }
+
+      const current = cacheRef.current;
+      if (!current) return;
+      const remoteTime = remote ? new Date(remote.client_updated_at).getTime() : 0;
+      const localTime = new Date(current.updatedAt).getTime();
+      if (current.updatedAt !== local.updatedAt && remoteTime <= localTime) {
+        rerunSyncRef.current = true;
+        setSyncStatus("pending");
+        await persistCache(current);
+        return;
+      }
+      const syncedAt = new Date().toISOString();
+      const next: GarageCache = remote && remoteTime > localTime
+        ? {
+            garage: normalizeGarage(remote.garage),
+            updatedAt: remote.client_updated_at,
+            dirty: false,
+            lastSyncedAt: syncedAt,
+          }
+        : { ...current, dirty: false, lastSyncedAt: syncedAt };
+      applyCache(next);
+      await persistCache(next);
+    } catch (error) {
+      console.warn("Garage sync failed", error);
+      setSyncStatus("error");
+    } finally {
+      syncingRef.current = false;
+      if (rerunSyncRef.current) {
+        rerunSyncRef.current = false;
+        void syncNow();
+      }
+    }
+  }, [applyCache, persistCache, pullRemote, storageKey, userId]);
 
   useEffect(() => {
     let active = true;
+    initializedRef.current = false;
+    cacheRef.current = undefined;
+    setIsLoading(true);
 
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((stored) => {
-        if (!active || !stored) return;
-        const parsed = JSON.parse(stored) as Garage;
-        if (parsed.vehicles?.length && parsed.activeVehicleId) {
-          setGarage({
-            ...parsed,
-            vehicles: parsed.vehicles.map((vehicle) => normalizeVehicle(vehicle)),
-          });
+    const initialize = async () => {
+      if (!storageKey || !userId) return;
+      const [userStored, legacyStored, network] = await Promise.all([
+        AsyncStorage.getItem(storageKey),
+        AsyncStorage.getItem(STORAGE_KEY),
+        NetInfo.fetch(),
+      ]);
+      if (!active) return;
+
+      const userCache = parseCache(userStored);
+      const legacyCache = parseCache(legacyStored);
+      const usedLegacyCache = !userCache && Boolean(legacyCache);
+      const online = Boolean(network.isConnected && network.isInternetReachable !== false);
+      setIsOnline(online);
+
+      let initial = userCache ?? legacyCache ?? {
+        garage: defaultGarage,
+        updatedAt: new Date().toISOString(),
+        dirty: true,
+      };
+
+      if (!userCache && online) {
+        try {
+          const remote = await pullRemote();
+          if (remote) {
+            initial = {
+              garage: normalizeGarage(remote.garage),
+              updatedAt: remote.client_updated_at,
+              dirty: false,
+              lastSyncedAt: new Date().toISOString(),
+            };
+          }
+        } catch (error) {
+          console.warn("Initial cloud load failed", error);
         }
-      })
-      .catch((error) => console.warn("Could not load garage", error))
-      .finally(() => active && setIsLoading(false));
+      }
+
+      if (!active) return;
+      applyCache(initial);
+      await persistCache(initial);
+      if (usedLegacyCache) await AsyncStorage.removeItem(STORAGE_KEY);
+      initializedRef.current = true;
+      setIsLoading(false);
+      void syncNow();
+    };
+
+    initialize().catch((error) => {
+      console.warn("Could not initialize garage", error);
+      if (!active) return;
+      const fallback: GarageCache = {
+        garage: defaultGarage,
+        updatedAt: new Date().toISOString(),
+        dirty: true,
+      };
+      applyCache(fallback);
+      initializedRef.current = true;
+      setIsLoading(false);
+      setSyncStatus("error");
+    });
 
     return () => {
       active = false;
     };
-  }, []);
+  }, [applyCache, persistCache, pullRemote, storageKey, syncNow, userId]);
 
-  const saveGarage = (updater: Garage | ((current: Garage) => Garage)) => {
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
+      setIsOnline(online);
+      if (online) void syncNow();
+      else setSyncStatus("offline");
+    });
+    return unsubscribe;
+  }, [syncNow]);
+
+  const saveGarage = useCallback((updater: Garage | ((current: Garage) => Garage)) => {
     setGarage((current) => {
       const next = typeof updater === "function" ? updater(current) : updater;
-      AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next)).catch((error) =>
-        console.warn("Could not save garage", error),
-      );
+      const cache: GarageCache = {
+        garage: next,
+        updatedAt: new Date().toISOString(),
+        dirty: true,
+        lastSyncedAt: cacheRef.current?.lastSyncedAt,
+      };
+      cacheRef.current = cache;
+      setSyncStatus(isOnline ? "pending" : "offline");
+      persistCache(cache)
+        .then(() => syncNow())
+        .catch((error) => console.warn("Could not save garage", error));
       return next;
     });
-  };
+  }, [isOnline, persistCache, syncNow]);
 
   const activeVehicle = useMemo(
     () => garage.vehicles.find((vehicle) => vehicle.id === garage.activeVehicleId) ?? garage.vehicles[0],
@@ -340,6 +568,11 @@ function useVehicleStoreState() {
     addVehicle,
     updateVehicle,
     removeVehicle,
+    syncStatus,
+    isOnline,
+    pendingChanges: Boolean(cacheRef.current?.dirty),
+    lastSyncedAt,
+    retrySync: syncNow,
   };
 }
 

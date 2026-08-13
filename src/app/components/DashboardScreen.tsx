@@ -14,6 +14,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { useAuth } from "../../providers/AuthProvider";
+
 import {
   ActivityRow,
   ActivitySheet,
@@ -108,6 +110,7 @@ function formatSavedAt(date?: string) {
 }
 
 export default function DashboardScreen() {
+  const { user, signOut } = useAuth();
   const {
     garage,
     activeVehicle: vehicle,
@@ -116,6 +119,8 @@ export default function DashboardScreen() {
     addVehicle,
     updateVehicle,
     removeVehicle,
+    syncStatus,
+    retrySync,
   } = useVehicleStore();
   const [scannerMode, setScannerMode] = useState<"odometer" | "fuel" | null>(null);
   const [sheet, setSheet] = useState<
@@ -164,6 +169,13 @@ export default function DashboardScreen() {
 
   const healthColor = (percent: number) =>
     percent > 50 ? COLORS.green : percent > 20 ? COLORS.amber : COLORS.red;
+  const syncMeta = {
+    synced: { label: "Synced", color: COLORS.green, icon: "cloud-done-outline" as const },
+    syncing: { label: "Syncing", color: COLORS.cyan, icon: "sync-outline" as const },
+    pending: { label: "Pending", color: COLORS.amber, icon: "cloud-upload-outline" as const },
+    offline: { label: "Offline", color: COLORS.amber, icon: "cloud-offline-outline" as const },
+    error: { label: "Retry sync", color: COLORS.red, icon: "alert-circle-outline" as const },
+  }[syncStatus];
 
   const openLog = (type: Exclude<LogType, "odometer">) => {
     setLogType(type);
@@ -306,6 +318,21 @@ export default function DashboardScreen() {
     );
   };
 
+  const confirmSignOut = () => {
+    Alert.alert(
+      "Sign out?",
+      "Unsynced data device par safe rahega aur isi account se dobara sign in karne par sync hoga.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign out",
+          style: "destructive",
+          onPress: () => signOut().catch((error) => Alert.alert("Could not sign out", error.message)),
+        },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar style="light" />
@@ -329,10 +356,10 @@ export default function DashboardScreen() {
             <Ionicons name="chevron-down" size={14} color={COLORS.muted} />
           </Pressable>
 
-          <View style={styles.onlinePill}>
-            <Ionicons name="phone-portrait-outline" size={13} color={COLORS.green} />
-            <Text style={styles.onlineText}>On device</Text>
-          </View>
+          <Pressable style={styles.onlinePill} onPress={() => retrySync()} hitSlop={7}>
+            <Ionicons name={syncMeta.icon} size={13} color={syncMeta.color} />
+            <Text style={[styles.onlineText, { color: syncMeta.color }]}>{syncMeta.label}</Text>
+          </Pressable>
         </View>
 
         <LinearGradient
@@ -508,6 +535,11 @@ export default function DashboardScreen() {
           setSheet("vehicle-form");
         }}
         onDelete={confirmDeleteVehicle}
+        accountEmail={user?.email}
+        syncLabel={syncMeta.label}
+        syncColor={syncMeta.color}
+        onSync={() => retrySync()}
+        onSignOut={confirmSignOut}
       />
       <VehicleFormSheet
         key={`${editingVehicle?.id ?? "new-vehicle"}-${sheet === "vehicle-form"}`}

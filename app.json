@@ -20,7 +20,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.vehicleServiceLog"
@@ -52,7 +54,9 @@
         {
           "photosPermission": "Allow app access to select odometer and petrol pump images."
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,

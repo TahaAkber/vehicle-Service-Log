@@ -187,6 +187,11 @@ type GarageSheetProps = {
   onAdd: () => void;
   onEdit: (vehicle: Vehicle) => void;
   onDelete: (vehicle: Vehicle) => void;
+  accountEmail?: string;
+  syncLabel: string;
+  syncColor: string;
+  onSync: () => void;
+  onSignOut: () => void;
 };
 
 export function GarageSheet({
@@ -198,6 +203,11 @@ export function GarageSheet({
   onAdd,
   onEdit,
   onDelete,
+  accountEmail,
+  syncLabel,
+  syncColor,
+  onSync,
+  onSignOut,
 }: GarageSheetProps) {
   return (
     <Sheet
@@ -261,6 +271,28 @@ export function GarageSheet({
           </View>
           <Ionicons name="chevron-forward" size={18} color={C.muted} />
         </Pressable>
+
+        <View style={styles.accountCard}>
+          <View style={styles.accountTopRow}>
+            <View style={styles.accountAvatar}>
+              <Ionicons name="person-outline" size={20} color={C.cyan} />
+            </View>
+            <View style={styles.rowCopy}>
+              <Text style={styles.accountLabel}>SIGNED IN AS</Text>
+              <Text style={styles.accountEmail} numberOfLines={1}>{accountEmail ?? "Supabase user"}</Text>
+            </View>
+          </View>
+          <View style={styles.accountActions}>
+            <Pressable style={styles.syncButton} onPress={onSync}>
+              <Ionicons name="sync-outline" size={17} color={syncColor} />
+              <Text style={[styles.syncButtonText, { color: syncColor }]}>{syncLabel}</Text>
+            </Pressable>
+            <Pressable style={styles.signOutButton} onPress={onSignOut}>
+              <Ionicons name="log-out-outline" size={17} color={C.red} />
+              <Text style={styles.signOutText}>Sign out</Text>
+            </Pressable>
+          </View>
+        </View>
       </ScrollView>
     </Sheet>
   );
@@ -907,6 +939,16 @@ const styles = StyleSheet.create({
   activeBadgeText: { color: C.green, fontSize: 8, fontWeight: "900", letterSpacing: 0.5 },
   iconButton: { width: 32, height: 34, marginLeft: 3, borderRadius: 9, alignItems: "center", justifyContent: "center" },
   addVehicleButton: { flexDirection: "row", alignItems: "center", minHeight: 68, marginTop: 5, padding: 12, borderRadius: 16, borderWidth: 1, borderStyle: "dashed", borderColor: "#285273" },
+  accountCard: { marginTop: 8, padding: 14, borderRadius: 16, backgroundColor: C.raised, borderWidth: 1, borderColor: C.border },
+  accountTopRow: { flexDirection: "row", alignItems: "center", gap: 11 },
+  accountAvatar: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: "#112D42" },
+  accountLabel: { color: C.muted, fontSize: 8, fontWeight: "900", letterSpacing: 0.8 },
+  accountEmail: { marginTop: 3, color: C.text, fontSize: 12, fontWeight: "700" },
+  accountActions: { flexDirection: "row", gap: 9, marginTop: 13 },
+  syncButton: { flex: 1, minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, borderRadius: 11, backgroundColor: C.surface },
+  syncButtonText: { fontSize: 10, fontWeight: "800" },
+  signOutButton: { minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingHorizontal: 13, borderRadius: 11, backgroundColor: "#2A1720" },
+  signOutText: { color: C.red, fontSize: 10, fontWeight: "800" },
   addVehicleIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#102A3E" },
   addVehicleTitle: { color: C.cyan, fontSize: 13, fontWeight: "700" },
   field: { marginBottom: 15 },
