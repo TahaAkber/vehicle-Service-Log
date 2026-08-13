@@ -22,10 +22,17 @@ import {
   VehicleFormSheet,
   type LogInput,
 } from "./DashboardSheets";
-import { OdometerScanner } from "./OdometerScanner";
+import {
+  FuelScanner,
+  OdometerScanner,
+  type FuelScanResult,
+  type ScanSource,
+} from "./OdometerScanner";
 import {
   createLogId,
   getHealth,
+  getOilHealth,
+  oilCategoryLabel,
   type LogType,
   type Vehicle,
   type VehicleInput,
@@ -90,7 +97,7 @@ export default function DashboardScreen() {
     updateVehicle,
     removeVehicle,
   } = useVehicleStore();
-  const [isScanning, setIsScanning] = useState(false);
+  const [scannerMode, setScannerMode] = useState<"odometer" | "fuel" | null>(null);
   const [sheet, setSheet] = useState<
     "garage" | "vehicle-form" | "log" | "maintenance" | "activity" | null
   >(null);
@@ -107,17 +114,23 @@ export default function DashboardScreen() {
     );
   }
 
-  const oilHealth = getHealth(vehicle.odometer, vehicle.oilLastChanged, vehicle.oilInterval);
+  const oilHealth = getOilHealth(vehicle);
   const chainHealth = getHealth(
     vehicle.odometer,
     vehicle.chainLastServiced,
     vehicle.chainInterval,
   );
   const formattedOdometer = new Intl.NumberFormat("en-US").format(vehicle.odometer);
+  const oilIsTimeLimited = oilHealth.limitingFactor === "time" && oilHealth.percent <= chainHealth.percent;
   const nextServiceDistance = Math.min(oilHealth.remaining, chainHealth.remaining);
   const nextServiceAt = new Intl.NumberFormat("en-US").format(
     vehicle.odometer + nextServiceDistance,
   );
+  const nextOilDate = new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(oilHealth.dueDate));
 
   const healthColor = (percent: number) =>
     percent > 50 ? COLORS.green : percent > 20 ? COLORS.amber : COLORS.red;
@@ -127,9 +140,9 @@ export default function DashboardScreen() {
     setSheet("log");
   };
 
-  const handleScanSuccess = (reading: number) => {
+  const handleScanSuccess = (reading: number, source: ScanSource) => {
     const nextReading = Math.round(reading);
-    setIsScanning(false);
+    setScannerMode(null);
     if (nextReading < vehicle.odometer) {
       Alert.alert(
         "Reading not saved",
@@ -147,6 +160,7 @@ export default function DashboardScreen() {
           title: "Odometer scanned",
           date: new Date().toISOString(),
           odometer: nextReading,
+          source,
         },
         ...current.logs,
       ],
@@ -165,6 +179,34 @@ export default function DashboardScreen() {
       ...current,
       odometer: Math.max(current.odometer, input.odometer),
       oilLastChanged: input.type === "oil" ? input.odometer : current.oilLastChanged,
+      oilLastChangedAt:
+        input.type === "oil" ? new Date().toISOString() : current.oilLastChangedAt,
+      oilCategory:
+        input.type === "oil" && input.oilCategory ? input.oilCategory : current.oilCategory,
+      oilType:
+        input.type === "oil" && input.oilCategory
+          ? oilCategoryLabel(input.oilCategory)
+          : current.oilType,
+      oilBrand:
+        input.type === "oil" && input.oilBrand !== undefined
+          ? input.oilBrand
+          : current.oilBrand,
+      oilViscosity:
+        input.type === "oil" && input.oilViscosity !== undefined
+          ? input.oilViscosity
+          : current.oilViscosity,
+      oilInterval:
+        input.type === "oil" && input.oilInterval
+          ? input.oilInterval
+          : current.oilInterval,
+      oilTimeIntervalMonths:
+        input.type === "oil" && input.oilTimeIntervalMonths
+          ? input.oilTimeIntervalMonths
+          : current.oilTimeIntervalMonths,
+      ridingCondition:
+        input.type === "oil" && input.ridingCondition
+          ? input.ridingCondition
+          : current.ridingCondition,
       chainLastServiced:
         input.type === "chain" ? input.odometer : current.chainLastServiced,
       logs: [
@@ -175,6 +217,16 @@ export default function DashboardScreen() {
           date: new Date().toISOString(),
           odometer: input.odometer,
           liters: input.liters,
+          amount: input.amount,
+          unitPrice: input.unitPrice,
+          fullTank: input.fullTank,
+          source: input.source,
+          oilCategory: input.oilCategory,
+          oilBrand: input.oilBrand,
+          oilViscosity: input.oilViscosity,
+          oilInterval: input.oilInterval,
+          oilTimeIntervalMonths: input.oilTimeIntervalMonths,
+          ridingCondition: input.ridingCondition,
           note: input.type === "service" ? undefined : input.note || undefined,
         },
         ...current.logs,
@@ -182,6 +234,20 @@ export default function DashboardScreen() {
     }));
     setSheet(null);
     Alert.alert("Log saved", `${titles[input.type]} successfully add ho gaya.`);
+  };
+
+  const handleFuelScanSuccess = (result: FuelScanResult) => {
+    setScannerMode(null);
+    handleSaveLog({
+      type: "fuel",
+      odometer: result.odometer,
+      liters: result.liters,
+      amount: result.amount,
+      unitPrice: result.unitPrice,
+      fullTank: result.fullTank,
+      source: result.source,
+      note: result.fullTank ? "Full tank refill" : "",
+    });
   };
 
   const handleSaveVehicle = (input: VehicleInput) => {
@@ -209,11 +275,22 @@ export default function DashboardScreen() {
     );
   };
 
-  if (isScanning) {
+  if (scannerMode === "odometer") {
     return (
       <OdometerScanner
+        currentOdometer={vehicle.odometer}
         onScanSuccess={handleScanSuccess}
-        onCancel={() => setIsScanning(false)}
+        onCancel={() => setScannerMode(null)}
+      />
+    );
+  }
+
+  if (scannerMode === "fuel") {
+    return (
+      <FuelScanner
+        currentOdometer={vehicle.odometer}
+        onScanSuccess={handleFuelScanSuccess}
+        onCancel={() => setScannerMode(null)}
       />
     );
   }
@@ -296,7 +373,13 @@ export default function DashboardScreen() {
         <View style={styles.healthRow}>
           <HealthCard
             title={`Engine oil (${vehicle.oilType})`}
-            subtitle={oilHealth.overdue ? "Service overdue" : `${oilHealth.remaining} km remaining`}
+            subtitle={
+              oilHealth.overdue
+                ? "Oil change due"
+                : oilHealth.limitingFactor === "time"
+                  ? `${oilHealth.remainingDays} days remaining`
+                  : `${oilHealth.remaining} km remaining`
+            }
             value={oilHealth.percent}
             accent={healthColor(oilHealth.percent)}
             icon="water-outline"
@@ -314,7 +397,7 @@ export default function DashboardScreen() {
         <View style={styles.actionRow}>
           <Pressable
             style={({ pressed }) => [styles.scanButton, pressed && styles.pressed]}
-            onPress={() => setIsScanning(true)}
+            onPress={() => setScannerMode("odometer")}
           >
             <LinearGradient
               colors={["#3182F6", "#1765D8"]}
@@ -326,7 +409,7 @@ export default function DashboardScreen() {
                 <Ionicons name="scan-outline" size={24} color="#FFFFFF" />
               </View>
               <Text style={styles.actionTitle}>Scan odometer</Text>
-              <Text style={styles.actionSubtitle}>Use camera to read</Text>
+              <Text style={styles.actionSubtitle}>Camera, gallery or manual</Text>
             </LinearGradient>
           </Pressable>
 
@@ -341,6 +424,20 @@ export default function DashboardScreen() {
             <Text style={styles.actionSubtitle}>Record an oil change</Text>
           </Pressable>
         </View>
+
+        <Pressable
+          style={({ pressed }) => [styles.fuelButton, pressed && styles.pressed]}
+          onPress={() => setScannerMode("fuel")}
+        >
+          <View style={styles.fuelButtonIcon}>
+            <Ionicons name="flame-outline" size={23} color={COLORS.green} />
+          </View>
+          <View style={styles.fuelButtonCopy}>
+            <Text style={styles.actionTitle}>Add petrol refill</Text>
+            <Text style={styles.actionSubtitle}>Scan pump display, upload image or enter manually</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />
+        </Pressable>
 
         <View style={[styles.sectionHeader, styles.logsHeader]}>
           <Text style={styles.sectionTitle}>Recent activity</Text>
@@ -374,9 +471,13 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.nextServiceCopy}>
             <Text style={styles.nextServiceLabel}>NEXT RECOMMENDED SERVICE</Text>
-            <Text style={styles.nextServiceValue}>At {nextServiceAt} km</Text>
+            <Text style={styles.nextServiceValue}>
+              {oilIsTimeLimited ? `Oil by ${nextOilDate}` : `At ${nextServiceAt} km`}
+            </Text>
           </View>
-          <Text style={styles.nextServiceDistance}>{nextServiceDistance} km left</Text>
+          <Text style={styles.nextServiceDistance}>
+            {oilIsTimeLimited ? `${oilHealth.remainingDays} days left` : `${nextServiceDistance} km left`}
+          </Text>
         </Pressable>
       </ScrollView>
 
@@ -589,6 +690,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  fuelButton: { minHeight: 73, marginTop: 12, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", borderRadius: 18, backgroundColor: "#10251F", borderWidth: 1, borderColor: "#1E493A" },
+  fuelButtonIcon: { width: 43, height: 43, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "#12372C" },
+  fuelButtonCopy: { flex: 1, minWidth: 0, marginLeft: 12 },
   pressed: { opacity: 0.78, transform: [{ scale: 0.985 }] },
   actionIconLight: {
     width: 42,

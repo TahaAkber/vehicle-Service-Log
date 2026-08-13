@@ -19,8 +19,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.CAMERA"
       ],
       "package": "com.anonymous.vehicleServiceLog"
     },
@@ -42,7 +41,14 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow app access to scan odometer numbers."
+          "cameraPermission": "Allow app access to scan odometer and petrol pump displays.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow app access to select odometer and petrol pump images."
         }
       ]
     ],

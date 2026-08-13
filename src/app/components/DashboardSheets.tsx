@@ -14,8 +14,20 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import type { LogType, ServiceLog, Vehicle, VehicleInput } from "../data/vehicleStore";
-import { getHealth } from "../data/vehicleStore";
+import type {
+  LogType,
+  OilCategory,
+  RidingCondition,
+  ServiceLog,
+  Vehicle,
+  VehicleInput,
+} from "../data/vehicleStore";
+import {
+  getHealth,
+  getOilHealth,
+  oilCategoryLabel,
+  ridingConditionLabel,
+} from "../data/vehicleStore";
 
 const C = {
   bg: "#070C18",
@@ -33,6 +45,49 @@ const C = {
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 
+const oilCategoryOptions: { value: OilCategory; label: string }[] = [
+  { value: "mineral", label: "Mineral" },
+  { value: "semi-synthetic", label: "Semi-synthetic" },
+  { value: "fully-synthetic", label: "Fully synthetic" },
+  { value: "other", label: "Other" },
+];
+
+const ridingConditionOptions: { value: RidingCondition; label: string }[] = [
+  { value: "normal", label: "Normal" },
+  { value: "heavy-traffic", label: "Heavy traffic" },
+  { value: "dusty", label: "Dusty roads" },
+  { value: "long-distance", label: "Long distance" },
+];
+
+function OptionChips<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View style={styles.optionChips}>
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <Pressable
+            key={option.value}
+            style={[styles.optionChip, selected && styles.optionChipSelected]}
+            onPress={() => onChange(option.value)}
+          >
+            <Text style={[styles.optionChipText, selected && styles.optionChipTextSelected]}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const logMeta: Record<LogType, { label: string; icon: IconName; color: string }> = {
   oil: { label: "Oil change", icon: "water-outline", color: C.blue },
   chain: { label: "Chain service", icon: "link-outline", color: C.amber },
@@ -46,6 +101,16 @@ export type LogInput = {
   odometer: number;
   note: string;
   liters?: number;
+  amount?: number;
+  unitPrice?: number;
+  fullTank?: boolean;
+  source?: "camera" | "gallery" | "manual";
+  oilCategory?: OilCategory;
+  oilBrand?: string;
+  oilViscosity?: string;
+  oilInterval?: number;
+  oilTimeIntervalMonths?: number;
+  ridingCondition?: RidingCondition;
 };
 
 type SheetProps = {
@@ -167,21 +232,26 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
   const [name, setName] = useState(vehicle?.name ?? "");
   const [odometer, setOdometer] = useState(String(vehicle?.odometer ?? ""));
   const [dailyCommute, setDailyCommute] = useState(String(vehicle?.dailyCommute ?? 20));
-  const [oilType, setOilType] = useState(vehicle?.oilType ?? "Semi-synthetic");
+  const [oilCategory, setOilCategory] = useState<OilCategory>(vehicle?.oilCategory ?? "semi-synthetic");
+  const [oilBrand, setOilBrand] = useState(vehicle?.oilBrand ?? "");
+  const [oilViscosity, setOilViscosity] = useState(vehicle?.oilViscosity ?? "");
   const [oilInterval, setOilInterval] = useState(String(vehicle?.oilInterval ?? 1000));
+  const [oilMonths, setOilMonths] = useState(String(vehicle?.oilTimeIntervalMonths ?? 3));
+  const [ridingCondition, setRidingCondition] = useState<RidingCondition>(vehicle?.ridingCondition ?? "normal");
   const [chainInterval, setChainInterval] = useState(String(vehicle?.chainInterval ?? 500));
 
   const submit = () => {
     const parsedOdometer = Number(odometer);
     const parsedCommute = Number(dailyCommute);
     const parsedOilInterval = Number(oilInterval);
+    const parsedOilMonths = Number(oilMonths);
     const parsedChainInterval = Number(chainInterval);
 
     if (!name.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
       Alert.alert("Missing details", "Vehicle name aur valid odometer reading enter karein.");
       return;
     }
-    if (parsedOilInterval <= 0 || parsedChainInterval <= 0 || parsedCommute < 0) {
+    if (parsedOilInterval <= 0 || parsedOilMonths <= 0 || parsedChainInterval <= 0 || parsedCommute < 0) {
       Alert.alert("Invalid interval", "Service intervals zero se greater hone chahiye.");
       return;
     }
@@ -190,8 +260,13 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
       name: name.trim(),
       odometer: Math.round(parsedOdometer),
       dailyCommute: Math.round(parsedCommute),
-      oilType: oilType.trim() || "Not specified",
+      oilType: oilCategoryLabel(oilCategory),
+      oilCategory,
+      oilBrand: oilBrand.trim(),
+      oilViscosity: oilViscosity.trim(),
       oilInterval: Math.round(parsedOilInterval),
+      oilTimeIntervalMonths: Math.round(parsedOilMonths),
+      ridingCondition,
       chainInterval: Math.round(parsedChainInterval),
     });
   };
@@ -227,11 +302,20 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
             placeholder="20"
           />
         </View>
-        <Field label="OIL TYPE" value={oilType} onChangeText={setOilType} placeholder="Semi-synthetic" />
+        <Text style={styles.fieldLabel}>OIL CATEGORY</Text>
+        <OptionChips
+          options={oilCategoryOptions}
+          value={oilCategory}
+          onChange={setOilCategory}
+        />
+        <View style={styles.twoColumns}>
+          <Field compact label="OIL BRAND (OPTIONAL)" value={oilBrand} onChangeText={setOilBrand} placeholder="e.g. Shell" />
+          <Field compact label="VISCOSITY" value={oilViscosity} onChangeText={setOilViscosity} placeholder="e.g. 20W-40" autoCapitalize="characters" />
+        </View>
         <View style={styles.twoColumns}>
           <Field
             compact
-            label="OIL INTERVAL"
+            label="CHANGE EVERY (KM)"
             value={oilInterval}
             onChangeText={setOilInterval}
             keyboardType="numeric"
@@ -239,13 +323,28 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
           />
           <Field
             compact
-            label="CHAIN INTERVAL"
-            value={chainInterval}
-            onChangeText={setChainInterval}
+            label="MAX AGE (MONTHS)"
+            value={oilMonths}
+            onChangeText={setOilMonths}
             keyboardType="numeric"
-            placeholder="500"
+            placeholder="3"
           />
         </View>
+        <Text style={styles.manualIntervalHint}>Aapka entered KM interval final hai. Category is value ko override nahi karegi.</Text>
+        <Text style={styles.fieldLabel}>RIDING CONDITION</Text>
+        <OptionChips
+          options={ridingConditionOptions}
+          value={ridingCondition}
+          onChange={setRidingCondition}
+        />
+        <Text style={styles.conditionHint}>Riding condition record hoti hai; health calculation aapke exact KM/month limits ko follow karti hai.</Text>
+        <Field
+          label="CHAIN SERVICE INTERVAL (KM)"
+          value={chainInterval}
+          onChangeText={setChainInterval}
+          keyboardType="numeric"
+          placeholder="500"
+        />
         <Pressable style={styles.primaryButton} onPress={submit}>
           <Ionicons name={vehicle ? "checkmark" : "add"} size={20} color="#FFFFFF" />
           <Text style={styles.primaryButtonText}>{vehicle ? "Save changes" : "Add to garage"}</Text>
@@ -286,28 +385,63 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
   const [type, setType] = useState<Exclude<LogType, "odometer">>(initialType);
   const [odometer, setOdometer] = useState(String(vehicle.odometer));
   const [liters, setLiters] = useState("");
+  const [amount, setAmount] = useState("");
+  const [unitPrice, setUnitPrice] = useState("");
+  const [fullTank, setFullTank] = useState(false);
   const [note, setNote] = useState("");
+  const [oilCategory, setOilCategory] = useState<OilCategory>(vehicle.oilCategory);
+  const [oilBrand, setOilBrand] = useState(vehicle.oilBrand);
+  const [oilViscosity, setOilViscosity] = useState(vehicle.oilViscosity);
+  const [oilInterval, setOilInterval] = useState(String(vehicle.oilInterval));
+  const [oilMonths, setOilMonths] = useState(String(vehicle.oilTimeIntervalMonths));
+  const [ridingCondition, setRidingCondition] = useState<RidingCondition>(vehicle.ridingCondition);
 
   const submit = () => {
     const parsedOdometer = Number(odometer);
-    const parsedLiters = Number(liters);
+    let parsedLiters = Number(liters);
+    let parsedAmount = Number(amount);
+    let parsedRate = Number(unitPrice);
+    const parsedOilInterval = Number(oilInterval);
+    const parsedOilMonths = Number(oilMonths);
     if (!Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
       Alert.alert("Invalid odometer", "Valid kilometer reading enter karein.");
       return;
     }
-    if (type === "fuel" && (!Number.isFinite(parsedLiters) || parsedLiters <= 0)) {
-      Alert.alert("Invalid fuel amount", "Refueled liters enter karein.");
-      return;
+    if (type === "fuel") {
+      const hasLiters = Number.isFinite(parsedLiters) && parsedLiters > 0;
+      const hasAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+      const hasRate = Number.isFinite(parsedRate) && parsedRate > 0;
+      if ([hasLiters, hasAmount, hasRate].filter(Boolean).length < 2) {
+        Alert.alert("More details needed", "Amount, liters aur rate mein se kam az kam do values enter karein.");
+        return;
+      }
+      if (!hasLiters) parsedLiters = parsedAmount / parsedRate;
+      if (!hasAmount) parsedAmount = parsedLiters * parsedRate;
+      if (!hasRate) parsedRate = parsedAmount / parsedLiters;
     }
     if (type === "service" && !note.trim()) {
       Alert.alert("Service details", "Service ka short description enter karein.");
+      return;
+    }
+    if (type === "oil" && (parsedOilInterval <= 0 || parsedOilMonths <= 0)) {
+      Alert.alert("Invalid oil interval", "Kilometer interval aur maximum months zero se greater hone chahiye.");
       return;
     }
     onSave({
       type,
       odometer: Math.round(parsedOdometer),
       liters: type === "fuel" ? parsedLiters : undefined,
+      amount: type === "fuel" ? Number(parsedAmount.toFixed(2)) : undefined,
+      unitPrice: type === "fuel" ? Number(parsedRate.toFixed(2)) : undefined,
+      fullTank: type === "fuel" ? fullTank : undefined,
+      source: "manual",
       note: note.trim(),
+      oilCategory: type === "oil" ? oilCategory : undefined,
+      oilBrand: type === "oil" ? oilBrand.trim() : undefined,
+      oilViscosity: type === "oil" ? oilViscosity.trim() : undefined,
+      oilInterval: type === "oil" ? Math.round(parsedOilInterval) : undefined,
+      oilTimeIntervalMonths: type === "oil" ? Math.round(parsedOilMonths) : undefined,
+      ridingCondition: type === "oil" ? ridingCondition : undefined,
     });
   };
 
@@ -343,14 +477,62 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
           onChangeText={setOdometer}
           keyboardType="numeric"
         />
+        {type === "oil" ? (
+          <>
+            <Text style={styles.fieldLabel}>NEW OIL CATEGORY</Text>
+            <OptionChips options={oilCategoryOptions} value={oilCategory} onChange={setOilCategory} />
+            <View style={styles.twoColumns}>
+              <Field compact label="OIL BRAND (OPTIONAL)" value={oilBrand} onChangeText={setOilBrand} placeholder="e.g. Shell" />
+              <Field compact label="VISCOSITY" value={oilViscosity} onChangeText={setOilViscosity} placeholder="e.g. 20W-40" autoCapitalize="characters" />
+            </View>
+            <View style={styles.twoColumns}>
+              <Field compact label="CHANGE EVERY (KM)" value={oilInterval} onChangeText={setOilInterval} keyboardType="numeric" placeholder="1000" />
+              <Field compact label="MAX AGE (MONTHS)" value={oilMonths} onChangeText={setOilMonths} keyboardType="numeric" placeholder="3" />
+            </View>
+            <Text style={styles.manualIntervalHint}>Example: 1,000 km set karne par countdown isi exact interval se reset hoga.</Text>
+            <Text style={styles.fieldLabel}>RIDING CONDITION</Text>
+            <OptionChips options={ridingConditionOptions} value={ridingCondition} onChange={setRidingCondition} />
+            <Text style={styles.conditionHint}>Condition reference ke liye save hogi; custom interval automatically reduce nahi hoga.</Text>
+          </>
+        ) : null}
         {type === "fuel" ? (
-          <Field
-            label="FUEL ADDED (LITERS)"
-            value={liters}
-            onChangeText={setLiters}
-            keyboardType="decimal-pad"
-            placeholder="e.g. 6.2"
-          />
+          <>
+            <Field
+              label="TOTAL AMOUNT (RS)"
+              value={amount}
+              onChangeText={setAmount}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 2000"
+            />
+            <View style={styles.twoColumns}>
+              <Field
+                compact
+                label="FUEL (LITERS)"
+                value={liters}
+                onChangeText={setLiters}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 7.81"
+              />
+              <Field
+                compact
+                label="RATE / LITER"
+                value={unitPrice}
+                onChangeText={setUnitPrice}
+                keyboardType="decimal-pad"
+                placeholder="e.g. 256.13"
+              />
+            </View>
+            <Pressable style={styles.fullTankRow} onPress={() => setFullTank((value) => !value)}>
+              <View style={[styles.checkbox, fullTank && styles.checkboxActive]}>
+                {fullTank ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+              </View>
+              <View style={styles.rowCopy}>
+                <Text style={styles.rowTitle}>Full tank refill</Text>
+                <Text style={styles.rowSubtitle}>Fuel average calculation ke liye</Text>
+              </View>
+            </Pressable>
+            <Text style={styles.fuelHint}>Koi bhi do values enter karein; third automatically calculate ho jayegi.</Text>
+          </>
         ) : null}
         <Field
           label={type === "service" ? "SERVICE DETAILS" : "NOTE (OPTIONAL)"}
@@ -375,7 +557,7 @@ type MaintenanceSheetProps = {
 };
 
 export function MaintenanceSheet({ visible, vehicle, onClose, onLog }: MaintenanceSheetProps) {
-  const oil = getHealth(vehicle.odometer, vehicle.oilLastChanged, vehicle.oilInterval);
+  const oil = getOilHealth(vehicle);
   const chain = getHealth(vehicle.odometer, vehicle.chainLastServiced, vehicle.chainInterval);
 
   return (
@@ -384,17 +566,23 @@ export function MaintenanceSheet({ visible, vehicle, onClose, onLog }: Maintenan
         <MaintenanceDetail
           title={`Engine oil (${vehicle.oilType})`}
           icon="water-outline"
-          color={C.green}
+          color={oil.percent > 50 ? C.green : oil.percent > 20 ? C.amber : C.red}
           percent={oil.percent}
           remaining={oil.remaining}
+          remainingDays={oil.remainingDays}
           interval={vehicle.oilInterval}
+          timeIntervalMonths={vehicle.oilTimeIntervalMonths}
           lastService={vehicle.oilLastChanged}
+          lastServiceDate={vehicle.oilLastChangedAt}
+          detail={[vehicle.oilBrand, vehicle.oilViscosity, ridingConditionLabel(vehicle.ridingCondition)]
+            .filter(Boolean)
+            .join(" • ")}
           onLog={() => onLog("oil")}
         />
         <MaintenanceDetail
           title="Chain lube & clean"
           icon="link-outline"
-          color={C.amber}
+          color={chain.percent > 50 ? C.green : chain.percent > 20 ? C.amber : C.red}
           percent={chain.percent}
           remaining={chain.remaining}
           interval={vehicle.chainInterval}
@@ -412,8 +600,12 @@ type MaintenanceDetailProps = {
   color: string;
   percent: number;
   remaining: number;
+  remainingDays?: number;
   interval: number;
+  timeIntervalMonths?: number;
   lastService: number;
+  lastServiceDate?: string;
+  detail?: string;
   onLog: () => void;
 };
 
@@ -426,7 +618,10 @@ function MaintenanceDetail(props: MaintenanceDetailProps) {
         </View>
         <View style={styles.rowCopy}>
           <Text style={styles.rowTitle}>{props.title}</Text>
-          <Text style={styles.rowSubtitle}>{props.remaining} km remaining</Text>
+          <Text style={styles.rowSubtitle}>
+            {props.remaining} km{props.remainingDays !== undefined ? ` • ${props.remainingDays} days` : ""} remaining
+          </Text>
+          {props.detail ? <Text style={styles.maintenanceDetailText}>{props.detail}</Text> : null}
         </View>
         <Text style={[styles.maintenancePercent, { color: props.color }]}>{props.percent}%</Text>
       </View>
@@ -437,10 +632,17 @@ function MaintenanceDetail(props: MaintenanceDetailProps) {
         <View>
           <Text style={styles.statLabel}>LAST SERVICE</Text>
           <Text style={styles.statValue}>{props.lastService.toLocaleString()} km</Text>
+          {props.lastServiceDate ? (
+            <Text style={styles.statDate}>
+              {new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(props.lastServiceDate))}
+            </Text>
+          ) : null}
         </View>
         <View>
           <Text style={styles.statLabel}>INTERVAL</Text>
-          <Text style={styles.statValue}>{props.interval.toLocaleString()} km</Text>
+          <Text style={styles.statValue}>
+            {props.interval.toLocaleString()} km{props.timeIntervalMonths ? ` / ${props.timeIntervalMonths} mo` : ""}
+          </Text>
         </View>
         <Pressable style={styles.smallButton} onPress={props.onLog}>
           <Text style={styles.smallButtonText}>Log now</Text>
@@ -491,6 +693,14 @@ export function ActivityRow({ log, compact = false }: { log: ServiceLog; compact
     Alert.alert(
       log.title,
       [`Date: ${date}`, `Odometer: ${log.odometer.toLocaleString()} km`, log.note]
+        .concat(log.amount ? [`Amount: Rs ${log.amount.toLocaleString()}`] : [])
+        .concat(log.liters ? [`Petrol: ${log.liters} liters`] : [])
+        .concat(log.unitPrice ? [`Rate: Rs ${log.unitPrice}/L`] : [])
+        .concat(log.oilCategory ? [`Oil: ${oilCategoryLabel(log.oilCategory)}`] : [])
+        .concat(log.oilBrand ? [`Brand: ${log.oilBrand}`] : [])
+        .concat(log.oilViscosity ? [`Viscosity: ${log.oilViscosity}`] : [])
+        .concat(log.oilInterval ? [`Change interval: ${log.oilInterval.toLocaleString()} km`] : [])
+        .concat(log.oilTimeIntervalMonths ? [`Maximum age: ${log.oilTimeIntervalMonths} months`] : [])
         .filter(Boolean)
         .join("\n"),
     );
@@ -548,8 +758,19 @@ const styles = StyleSheet.create({
   field: { marginBottom: 15 },
   compactField: { flex: 1, minWidth: 0 },
   fieldLabel: { marginBottom: 7, color: C.muted, fontSize: 9, fontWeight: "800", letterSpacing: 0.8 },
+  optionChips: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 15 },
+  optionChip: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 10, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  optionChipSelected: { backgroundColor: "#102A3E", borderColor: "#286188" },
+  optionChipText: { color: C.muted, fontSize: 9, fontWeight: "700" },
+  optionChipTextSelected: { color: C.cyan },
+  manualIntervalHint: { marginTop: -7, marginBottom: 15, color: C.cyan, fontSize: 9, lineHeight: 14 },
+  conditionHint: { marginTop: -8, marginBottom: 15, color: C.muted, fontSize: 8, lineHeight: 13 },
   input: { height: 48, paddingHorizontal: 13, borderRadius: 13, color: C.text, fontSize: 14, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   twoColumns: { flexDirection: "row", gap: 11 },
+  fullTankRow: { flexDirection: "row", alignItems: "center", marginBottom: 6, padding: 12, borderRadius: 13, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  checkbox: { width: 23, height: 23, borderRadius: 7, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#526078" },
+  checkboxActive: { backgroundColor: C.blue, borderColor: C.blue },
+  fuelHint: { marginBottom: 15, color: C.muted, fontSize: 9, lineHeight: 14 },
   primaryButton: { minHeight: 50, marginTop: 8, borderRadius: 14, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: C.blue },
   primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "800" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 17 },
@@ -561,11 +782,13 @@ const styles = StyleSheet.create({
   maintenanceTop: { flexDirection: "row", alignItems: "center" },
   maintenanceIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },
   maintenancePercent: { fontSize: 17, fontWeight: "900" },
+  maintenanceDetailText: { marginTop: 3, color: C.muted, fontSize: 8 },
   progressTrack: { height: 6, marginTop: 16, overflow: "hidden", borderRadius: 4, backgroundColor: "#263247" },
   progressFill: { height: "100%", borderRadius: 4 },
   maintenanceStats: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", marginTop: 16 },
   statLabel: { color: C.muted, fontSize: 8, fontWeight: "800", letterSpacing: 0.6 },
   statValue: { marginTop: 4, color: C.text, fontSize: 11, fontWeight: "700" },
+  statDate: { marginTop: 2, color: C.muted, fontSize: 8 },
   smallButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: "#173A53" },
   smallButtonText: { color: C.cyan, fontSize: 10, fontWeight: "800" },
   activityRow: { minHeight: 72, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderRadius: 15, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
