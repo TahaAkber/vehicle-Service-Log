@@ -178,7 +178,7 @@ function SmartScanner({
   const [unitPrice, setUnitPrice] = useState("");
   const [fullTank, setFullTank] = useState(false);
 
-  const title = mode === "odometer" ? "Add odometer reading" : "Add petrol refill";
+  const title = mode === "odometer" ? "Add odometer reading" : "Add fuel refill";
 
   const processImage = async (uri: string, nextSource: ScanSource) => {
     try {
@@ -189,20 +189,20 @@ function SmartScanner({
       if (mode === "odometer") {
         const detected = parseOdometer(result, currentOdometer);
         if (detected !== undefined) setOdometer(String(detected));
-        else Alert.alert("Reading unclear", "OCR reading detect nahi kar saka. Manual value enter karein.");
+        else Alert.alert("Reading unclear", "OCR could not detect the reading. Enter the value manually.");
       } else {
         const detected = parseFuel(result);
         if (detected.amount) setAmount(detected.amount.toFixed(2));
         if (detected.liters) setLiters(detected.liters.toFixed(3));
         if (detected.unitPrice) setUnitPrice(detected.unitPrice.toFixed(2));
         if (!detected.amount && !detected.liters && !detected.unitPrice) {
-          Alert.alert("Pump values unclear", "Image process hui, lekin values clear nahi thin. Neeche manually correct karein.");
+          Alert.alert("Pump values unclear", "The image was processed, but the values were unclear. Correct them manually below.");
         }
       }
       setStep("confirm");
     } catch (error) {
       console.error("OCR error", error);
-      Alert.alert("Could not read image", "Clear image ke saath dobara try karein ya manual entry use karein.");
+      Alert.alert("Could not read image", "Try again with a clearer image or use manual entry.");
     } finally {
       setIsProcessing(false);
     }
@@ -213,7 +213,7 @@ function SmartScanner({
     if (!permissionResult.granted) {
       Alert.alert(
         "Gallery access needed",
-        "Local image select karne ke liye photo library access allow karein.",
+        "Allow photo library access to select an image from your device.",
         [
           { text: "Cancel", style: "cancel" },
           ...(permissionResult.canAskAgain
@@ -268,7 +268,7 @@ function SmartScanner({
   const submit = () => {
     const parsedOdometer = cleanNumber(odometer);
     if (!Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
-      Alert.alert("Invalid odometer", "Valid odometer reading enter karein.");
+      Alert.alert("Invalid odometer", "Enter a valid odometer reading.");
       return;
     }
 
@@ -276,7 +276,7 @@ function SmartScanner({
       if (parsedOdometer < currentOdometer) {
         Alert.alert(
           "Reading cannot decrease",
-          `Current saved odometer ${currentOdometer.toLocaleString()} km hai. Reading correct karke dobara save karein.`,
+          `The current saved odometer is ${currentOdometer.toLocaleString()} km. Correct the reading and save it again.`,
         );
         return;
       }
@@ -292,7 +292,7 @@ function SmartScanner({
     const hasRate = Number.isFinite(parsedRate) && parsedRate > 0;
 
     if ([hasAmount, hasLiters, hasRate].filter(Boolean).length < 2) {
-      Alert.alert("More details needed", "Amount, liters aur rate mein se kam az kam do values enter karein.");
+      Alert.alert("More details needed", "Enter at least two of these values: amount, liters, or price per liter.");
       return;
     }
     if (!hasLiters) parsedLiters = parsedAmount / parsedRate;
@@ -316,7 +316,7 @@ function SmartScanner({
           <StatusBar style="light" />
           <Ionicons name="camera-outline" size={40} color={C.cyan} />
           <Text style={styles.permissionTitle}>Camera access needed</Text>
-          <Text style={styles.permissionText}>Photo scan karne ke liye camera permission required hai.</Text>
+          <Text style={styles.permissionText}>Camera permission is required to scan a photo.</Text>
           <View style={styles.permissionActions}>
             <Pressable style={styles.secondaryButton} onPress={() => setStep("choose")}>
               <Text style={styles.secondaryButtonText}>Back</Text>
@@ -351,7 +351,7 @@ function SmartScanner({
             <View style={styles.cornerBottomRight} />
           </View>
           <View style={styles.captureArea}>
-            <Text style={styles.cameraHint}>{mode === "odometer" ? "Total odometer ko clear aur seedha rakhein" : "Amount, liters aur rate screen par visible hon"}</Text>
+            <Text style={styles.cameraHint}>{mode === "odometer" ? "Keep the total odometer clear and straight" : "Make sure the amount, liters, and price are visible"}</Text>
             <Pressable style={styles.captureOuter} onPress={capture} disabled={isProcessing}>
               {isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <View style={styles.captureInner} />}
             </Pressable>
@@ -376,16 +376,16 @@ function SmartScanner({
         <View style={styles.processing}>
           <ActivityIndicator size="large" color={C.cyan} />
           <Text style={styles.processingTitle}>Reading image…</Text>
-          <Text style={styles.processingCopy}>On-device OCR values detect kar raha hai.</Text>
+          <Text style={styles.processingCopy}>On-device OCR is detecting the values.</Text>
         </View>
       ) : step === "choose" ? (
         <ScrollView contentContainerStyle={styles.content}>
           <View style={[styles.heroIcon, { backgroundColor: mode === "fuel" ? "#123D31" : "#102A3E" }]}>
             <Ionicons name={mode === "fuel" ? "flame-outline" : "speedometer-outline"} size={34} color={mode === "fuel" ? C.green : C.cyan} />
           </View>
-          <Text style={styles.chooseTitle}>{mode === "fuel" ? "How do you want to add petrol?" : "How do you want to add reading?"}</Text>
-          <Text style={styles.chooseCopy}>Photo scan ke baad values confirm aur edit bhi ki ja sakti hain.</Text>
-          <MethodButton icon="camera-outline" title="Take a photo" subtitle={mode === "fuel" ? "Scan petrol pump display" : "Scan motorcycle odometer"} onPress={openCamera} />
+          <Text style={styles.chooseTitle}>{mode === "fuel" ? "How do you want to add fuel?" : "How do you want to add the reading?"}</Text>
+          <Text style={styles.chooseCopy}>You can review and edit the values after scanning a photo.</Text>
+          <MethodButton icon="camera-outline" title="Take a photo" subtitle={mode === "fuel" ? "Scan the fuel pump display" : "Scan the motorcycle odometer"} onPress={openCamera} />
           <MethodButton icon="images-outline" title="Choose from gallery" subtitle="Use an existing image from your phone" onPress={chooseGallery} />
           <MethodButton icon="keypad-outline" title="Enter manually" subtitle="Use when no image is available" onPress={useManual} />
         </ScrollView>
@@ -395,7 +395,7 @@ function SmartScanner({
             <Ionicons name={source === "manual" ? "create-outline" : "scan-circle-outline"} size={21} color={C.cyan} />
             <View style={styles.bannerCopy}>
               <Text style={styles.bannerTitle}>{source === "manual" ? "Manual entry" : "Review detected values"}</Text>
-              <Text style={styles.bannerSubtitle}>{source === "manual" ? "Required details fill karein" : "Save se pehle OCR values correct kar lein"}</Text>
+              <Text style={styles.bannerSubtitle}>{source === "manual" ? "Enter the required details" : "Review the OCR values before saving"}</Text>
             </View>
           </View>
 
@@ -404,7 +404,7 @@ function SmartScanner({
             <>
               <Input label="TOTAL AMOUNT (RS)" value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="e.g. 2000" />
               <View style={styles.twoColumns}>
-                <Input compact label="PETROL (LITERS)" value={liters} onChangeText={setLiters} keyboardType="decimal-pad" placeholder="e.g. 7.81" />
+                <Input compact label="FUEL (LITERS)" value={liters} onChangeText={setLiters} keyboardType="decimal-pad" placeholder="e.g. 7.81" />
                 <Input compact label="RATE / LITER" value={unitPrice} onChangeText={setUnitPrice} keyboardType="decimal-pad" placeholder="e.g. 256.13" />
               </View>
               <Pressable style={styles.toggleRow} onPress={() => setFullTank((value) => !value)}>
@@ -413,15 +413,15 @@ function SmartScanner({
                 </View>
                 <View style={styles.bannerCopy}>
                   <Text style={styles.toggleTitle}>Full tank refill</Text>
-                  <Text style={styles.toggleSubtitle}>Accurate fuel average calculate karne mein help karta hai</Text>
+                  <Text style={styles.toggleSubtitle}>Helps calculate accurate fuel efficiency</Text>
                 </View>
               </Pressable>
-              <Text style={styles.calculationNote}>Any two values fill karein; third value automatically calculate ho jayegi.</Text>
+              <Text style={styles.calculationNote}>Enter any two values and the third will be calculated automatically.</Text>
             </>
           ) : null}
           <Pressable style={styles.saveButton} onPress={submit}>
             <Ionicons name="checkmark-circle-outline" size={21} color="#FFFFFF" />
-            <Text style={styles.saveButtonText}>{mode === "fuel" ? "Save petrol log" : "Save odometer"}</Text>
+            <Text style={styles.saveButtonText}>{mode === "fuel" ? "Save fuel log" : "Save odometer"}</Text>
           </Pressable>
         </ScrollView>
       )}

@@ -36,11 +36,11 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const redirectTo = Linking.createURL("auth/callback");
 
 function authError(message?: string) {
-  if (!message) return "Authentication complete nahi ho saki.";
-  if (/invalid login credentials/i.test(message)) return "Email ya password incorrect hai.";
-  if (/email not confirmed/i.test(message)) return "Pehle apni email confirm karein.";
-  if (/already registered/i.test(message)) return "Is email ka account pehle se maujood hai.";
-  if (/network|fetch/i.test(message)) return "Internet connection available nahi hai.";
+  if (!message) return "Authentication could not be completed.";
+  if (/invalid login credentials/i.test(message)) return "The email or password is incorrect.";
+  if (/email not confirmed/i.test(message)) return "Please confirm your email first.";
+  if (/already registered/i.test(message)) return "An account with this email already exists.";
+  if (/network|fetch/i.test(message)) return "No internet connection is available.";
   return message;
 }
 
@@ -108,7 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const ensureConfigured = useCallback(() => {
     if (!isSupabaseConfigured) {
-      throw new Error("Supabase environment variables configure nahi hain.");
+      throw new Error("Supabase environment variables are not configured.");
     }
   }, []);
 
@@ -139,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { redirectTo, skipBrowserRedirect: true },
     });
     if (error) throw new Error(authError(error.message));
-    if (!data.url) throw new Error("Provider login URL generate nahi hua.");
+    if (!data.url) throw new Error("The provider login URL could not be generated.");
 
     const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
     if (result.type === "success") await createSessionFromUrl(result.url);

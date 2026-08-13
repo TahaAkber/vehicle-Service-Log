@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import type { LogType, ServiceLog } from "../data/vehicleStore";
 import { oilCategoryLabel, ridingConditionLabel, useVehicleStore } from "../data/vehicleStore";
+import EmptyGarageScreen from "./EmptyGarageScreen";
 
 const C = {
   bg: "#070C18",
@@ -58,13 +59,15 @@ export default function HistoryScreen() {
     return vehicle.logs.filter((log) => filter === "all" || log.type === filter);
   }, [filter, vehicle]);
 
-  if (isLoading || !vehicle) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.loading}>
         <ActivityIndicator color={C.cyan} />
       </SafeAreaView>
     );
   }
+
+  if (!vehicle) return <EmptyGarageScreen />;
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>

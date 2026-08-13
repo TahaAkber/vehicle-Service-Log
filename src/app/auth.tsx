@@ -1,10 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -61,11 +61,11 @@ export default function AuthScreen() {
         ? "Reset your password"
         : "Welcome back";
   const subtitle = recoveryMode
-    ? "Apne account ke liye secure password set karein."
+    ? "Set a secure password for your account."
     : mode === "signup"
       ? "Your garage, service history and fuel records—available on every device."
       : mode === "forgot"
-        ? "Password reset link aapki email par bhej denge."
+        ? "We will send a password reset link to your email."
         : "Sign in to keep your vehicle data safely synced.";
 
   const run = async (key: string, action: () => Promise<void>) => {
@@ -81,28 +81,28 @@ export default function AuthScreen() {
 
   const submit = () => run("form", async () => {
     if (recoveryMode) {
-      if (password.length < 8) throw new Error("Password kam az kam 8 characters ka hona chahiye.");
-      if (password !== confirmPassword) throw new Error("Passwords match nahi kar rahe.");
+      if (password.length < 8) throw new Error("The password must be at least 8 characters long.");
+      if (password !== confirmPassword) throw new Error("The passwords do not match.");
       await updatePassword(password);
-      Alert.alert("Password updated", "Aapka password successfully change ho gaya.");
+      Alert.alert("Password updated", "Your password has been changed successfully.");
       return;
     }
 
-    if (!email.trim() || !email.includes("@")) throw new Error("Valid email address enter karein.");
+    if (!email.trim() || !email.includes("@")) throw new Error("Enter a valid email address.");
     if (mode === "forgot") {
       await sendPasswordReset(email);
-      Alert.alert("Check your email", "Password reset link send kar diya gaya hai.");
+      Alert.alert("Check your email", "A password reset link has been sent.");
       setMode("login");
       return;
     }
-    if (password.length < 8) throw new Error("Password kam az kam 8 characters ka hona chahiye.");
+    if (password.length < 8) throw new Error("The password must be at least 8 characters long.");
 
     if (mode === "signup") {
-      if (!name.trim()) throw new Error("Apna name enter karein.");
-      if (password !== confirmPassword) throw new Error("Passwords match nahi kar rahe.");
+      if (!name.trim()) throw new Error("Enter your name.");
+      if (password !== confirmPassword) throw new Error("The passwords do not match.");
       const confirmationNeeded = await signUp(name, email, password);
       if (confirmationNeeded) {
-        Alert.alert("Confirm your email", "Account ban gaya. Email mein confirmation link open karein.");
+        Alert.alert("Confirm your email", "Your account was created. Open the confirmation link in your email.");
         setMode("login");
       }
       return;
@@ -123,11 +123,9 @@ export default function AuthScreen() {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.brandRow}>
-            <LinearGradient colors={["#2F80ED", "#27B7DA"]} style={styles.logo}>
-              <Ionicons name="speedometer" size={25} color="#FFFFFF" />
-            </LinearGradient>
+            <Image source={require("../../assets/images/app-icon.png")} style={styles.logo} />
             <View>
-              <Text style={styles.brand}>MotoLog</Text>
+              <Text style={styles.brand}>Vehicle Service Logs</Text>
               <Text style={styles.brandCaption}>VEHICLE CARE, SIMPLIFIED</Text>
             </View>
           </View>
@@ -142,7 +140,7 @@ export default function AuthScreen() {
               <Ionicons name="warning-outline" size={19} color="#FFCB72" />
               <View style={styles.flex}>
                 <Text style={styles.warningTitle}>Supabase setup required</Text>
-                <Text style={styles.warningText}>.env mein project URL aur publishable key add karein.</Text>
+                <Text style={styles.warningText}>Add the project URL and publishable key to the .env file.</Text>
               </View>
             </View>
           ) : null}
@@ -257,7 +255,7 @@ export default function AuthScreen() {
               }}
             >
               <Text style={styles.switchMuted}>
-                {recoveryMode || mode === "forgot" ? "Back to sign in" : mode === "signup" ? "Already have an account? " : "New to MotoLog? "}
+                {recoveryMode || mode === "forgot" ? "Back to sign in" : mode === "signup" ? "Already have an account? " : "New here? "}
               </Text>
               {!recoveryMode && mode !== "forgot" ? (
                 <Text style={styles.switchLink}>{mode === "signup" ? "Sign in" : "Create account"}</Text>
@@ -315,7 +313,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: 22, paddingTop: 20, paddingBottom: 30 },
   brandRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  logo: { width: 48, height: 48, alignItems: "center", justifyContent: "center", borderRadius: 15 },
+  logo: { width: 48, height: 48, borderRadius: 15, borderWidth: 1, borderColor: "#3A4B5F" },
   brand: { color: C.text, fontSize: 20, fontWeight: "900", letterSpacing: -0.4 },
   brandCaption: { marginTop: 2, color: C.cyan, fontSize: 8, fontWeight: "900", letterSpacing: 1.2 },
   heroCopy: { marginTop: 42, marginBottom: 24 },

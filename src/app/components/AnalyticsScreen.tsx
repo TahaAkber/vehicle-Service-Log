@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getHealth, getOilHealth, useVehicleStore } from "../data/vehicleStore";
+import EmptyGarageScreen from "./EmptyGarageScreen";
 
 const C = {
   bg: "#070C18",
@@ -51,13 +52,15 @@ export default function AnalyticsScreen() {
   const { garage, activeVehicle: vehicle, isLoading, selectVehicle } = useVehicleStore();
   const [showVehicles, setShowVehicles] = useState(false);
 
-  if (isLoading || !vehicle) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.loading}>
         <ActivityIndicator color={C.cyan} />
       </SafeAreaView>
     );
   }
+
+  if (!vehicle) return <EmptyGarageScreen />;
 
   const fuelLogs = vehicle.logs.filter((log) => log.type === "fuel");
   const orderedFuelLogs = fuelLogs

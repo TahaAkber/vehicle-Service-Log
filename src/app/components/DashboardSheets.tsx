@@ -349,7 +349,7 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
     const parsedLastOilDate = parseDateInput(lastOilDate);
 
     if (!name.trim() || !odometer.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
-      Alert.alert("Missing details", "Vehicle name aur valid odometer reading enter karein.");
+      Alert.alert("Missing details", "Enter a vehicle name and a valid odometer reading.");
       return;
     }
     if (
@@ -362,7 +362,7 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
       !Number.isFinite(parsedCommute) ||
       parsedCommute < 0
     ) {
-      Alert.alert("Invalid interval", "Service intervals zero se greater hone chahiye.");
+      Alert.alert("Invalid interval", "Service intervals must be greater than zero.");
       return;
     }
     if (
@@ -370,15 +370,15 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
       parsedLastOilOdometer < 0 ||
       parsedLastOilOdometer > parsedOdometer
     ) {
-      Alert.alert("Invalid oil reading", "Last oil-change reading current odometer se greater nahi ho sakti.");
+      Alert.alert("Invalid oil reading", "The last oil-change reading cannot be greater than the current odometer.");
       return;
     }
     if (!parsedLastOilDate || isFutureDate(parsedLastOilDate)) {
-      Alert.alert("Invalid date", "Last oil-change date YYYY-MM-DD format mein enter karein.");
+      Alert.alert("Invalid date", "Enter the last oil-change date in YYYY-MM-DD format and do not use a future date.");
       return;
     }
     if (vehicle && parsedOdometer < vehicle.odometer) {
-      Alert.alert("Odometer cannot decrease", `Current saved reading ${vehicle.odometer.toLocaleString()} km hai.`);
+      Alert.alert("Odometer cannot decrease", `The current saved reading is ${vehicle.odometer.toLocaleString()} km.`);
       return;
     }
 
@@ -458,7 +458,7 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
             placeholder="3"
           />
         </View>
-        <Text style={styles.manualIntervalHint}>Aapka entered KM interval final hai. Category is value ko override nahi karegi.</Text>
+        <Text style={styles.manualIntervalHint}>Your custom kilometer interval is final. The oil category will not override it.</Text>
         <View style={styles.twoColumns}>
           <Field
             compact
@@ -484,7 +484,7 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
           value={ridingCondition}
           onChange={setRidingCondition}
         />
-        <Text style={styles.conditionHint}>Riding condition record hoti hai; health calculation aapke exact KM/month limits ko follow karti hai.</Text>
+        <Text style={styles.conditionHint}>Riding conditions are saved for reference; health calculations follow your exact kilometer and month limits.</Text>
         <Field
           label="CHAIN SERVICE INTERVAL (KM)"
           value={chainInterval}
@@ -571,11 +571,11 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
     const parsedOilMonths = Number(oilMonths);
     const parsedLogDate = parseDateInput(logDate);
     if (!odometer.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
-      Alert.alert("Invalid odometer", "Valid kilometer reading enter karein.");
+      Alert.alert("Invalid odometer", "Enter a valid odometer reading.");
       return;
     }
     if (!parsedLogDate || isFutureDate(parsedLogDate)) {
-      Alert.alert("Invalid date", "Log date YYYY-MM-DD format mein enter karein aur future date use na karein.");
+      Alert.alert("Invalid date", "Enter the log date in YYYY-MM-DD format and do not use a future date.");
       return;
     }
     if (type === "fuel") {
@@ -583,7 +583,7 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
       const hasAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
       const hasRate = Number.isFinite(parsedRate) && parsedRate > 0;
       if ([hasLiters, hasAmount, hasRate].filter(Boolean).length < 2) {
-        Alert.alert("More details needed", "Amount, liters aur rate mein se kam az kam do values enter karein.");
+        Alert.alert("More details needed", "Enter at least two of these values: amount, liters, or price per liter.");
         return;
       }
       if (!hasLiters) parsedLiters = parsedAmount / parsedRate;
@@ -591,7 +591,7 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
       if (!hasRate) parsedRate = parsedAmount / parsedLiters;
     }
     if (type === "service" && !note.trim()) {
-      Alert.alert("Service details", "Service ka short description enter karein.");
+      Alert.alert("Service details", "Enter a short description of the service.");
       return;
     }
     if (
@@ -601,7 +601,7 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
         !Number.isFinite(parsedOilMonths) ||
         parsedOilMonths < 1)
     ) {
-      Alert.alert("Invalid oil interval", "Kilometer interval aur maximum months zero se greater hone chahiye.");
+      Alert.alert("Invalid oil interval", "The kilometer interval and maximum age must be greater than zero.");
       return;
     }
     onSave({
@@ -675,10 +675,10 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
               <Field compact label="CHANGE EVERY (KM)" value={oilInterval} onChangeText={setOilInterval} keyboardType="numeric" placeholder="1000" />
               <Field compact label="MAX AGE (MONTHS)" value={oilMonths} onChangeText={setOilMonths} keyboardType="numeric" placeholder="3" />
             </View>
-            <Text style={styles.manualIntervalHint}>Example: 1,000 km set karne par countdown isi exact interval se reset hoga.</Text>
+            <Text style={styles.manualIntervalHint}>Example: If you set 1,000 km, the countdown will reset using that exact interval.</Text>
             <Text style={styles.fieldLabel}>RIDING CONDITION</Text>
             <OptionChips options={ridingConditionOptions} value={ridingCondition} onChange={setRidingCondition} />
-            <Text style={styles.conditionHint}>Condition reference ke liye save hogi; custom interval automatically reduce nahi hoga.</Text>
+            <Text style={styles.conditionHint}>Conditions are saved for reference and will not automatically reduce your custom interval.</Text>
           </>
         ) : null}
         {type === "fuel" ? (
@@ -714,10 +714,10 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
               </View>
               <View style={styles.rowCopy}>
                 <Text style={styles.rowTitle}>Full tank refill</Text>
-                <Text style={styles.rowSubtitle}>Fuel average calculation ke liye</Text>
+                <Text style={styles.rowSubtitle}>Used for fuel efficiency calculations</Text>
               </View>
             </Pressable>
-            <Text style={styles.fuelHint}>Koi bhi do values enter karein; third automatically calculate ho jayegi.</Text>
+            <Text style={styles.fuelHint}>Enter any two values and the third will be calculated automatically.</Text>
           </>
         ) : null}
         <Field
@@ -880,7 +880,7 @@ export function ActivityRow({ log, compact = false }: { log: ServiceLog; compact
       log.title,
       [`Date: ${date}`, `Odometer: ${log.odometer.toLocaleString()} km`, log.note]
         .concat(log.amount ? [`Amount: Rs ${log.amount.toLocaleString()}`] : [])
-        .concat(log.liters ? [`Petrol: ${log.liters} liters`] : [])
+        .concat(log.liters ? [`Fuel: ${log.liters} liters`] : [])
         .concat(log.unitPrice ? [`Rate: Rs ${log.unitPrice}/L`] : [])
         .concat(log.oilCategory ? [`Oil: ${oilCategoryLabel(log.oilCategory)}`] : [])
         .concat(log.oilBrand ? [`Brand: ${log.oilBrand}`] : [])

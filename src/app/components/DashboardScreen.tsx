@@ -42,6 +42,7 @@ import {
   type VehicleInput,
   useVehicleStore,
 } from "../data/vehicleStore";
+import EmptyGarageScreen from "./EmptyGarageScreen";
 
 const COLORS = {
   background: "#070C18",
@@ -129,7 +130,7 @@ export default function DashboardScreen() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle>();
   const [logType, setLogType] = useState<Exclude<LogType, "odometer">>("oil");
 
-  if (isLoading || !vehicle) {
+  if (isLoading) {
     return (
       <SafeAreaView style={[styles.safeArea, styles.loadingScreen]}>
         <StatusBar style="light" />
@@ -138,6 +139,8 @@ export default function DashboardScreen() {
       </SafeAreaView>
     );
   }
+
+  if (!vehicle) return <EmptyGarageScreen />;
 
   const oilHealth = getOilHealth(vehicle);
   const chainHealth = getHealth(
@@ -188,7 +191,7 @@ export default function DashboardScreen() {
     if (nextReading < vehicle.odometer) {
       Alert.alert(
         "Reading not saved",
-        `Scanned value current ${vehicle.odometer.toLocaleString()} km se lower hai. Dobara scan karein.`,
+        `The scanned value is lower than the current ${vehicle.odometer.toLocaleString()} km reading. Scan it again.`,
       );
       return;
     }
@@ -207,7 +210,7 @@ export default function DashboardScreen() {
         ...current.logs,
       ]),
     }));
-    Alert.alert("Reading updated", `${nextReading.toLocaleString()} km save ho gaye.`);
+    Alert.alert("Reading updated", `${nextReading.toLocaleString()} km has been saved.`);
   };
 
   const handleSaveLog = (input: LogInput) => {
@@ -276,7 +279,7 @@ export default function DashboardScreen() {
       ]),
     }));
     setSheet(null);
-    Alert.alert("Log saved", `${titles[input.type]} successfully add ho gaya.`);
+    Alert.alert("Log saved", `${titles[input.type]} was added successfully.`);
   };
 
   const handleFuelScanSuccess = (result: FuelScanResult) => {
@@ -305,12 +308,12 @@ export default function DashboardScreen() {
 
   const confirmDeleteVehicle = (target: Vehicle) => {
     if (garage.vehicles.length === 1) {
-      Alert.alert("Vehicle required", "Garage mein kam az kam aik vehicle rehna chahiye.");
+      Alert.alert("Vehicle required", "At least one vehicle must remain in your garage.");
       return;
     }
     Alert.alert(
       `Delete ${target.name}?`,
-      "Is vehicle ke tamam service logs bhi delete ho jayenge. Yeh undo nahi ho sakta.",
+      "All service logs for this vehicle will also be deleted. This cannot be undone.",
       [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: () => removeVehicle(target.id) },
@@ -321,7 +324,7 @@ export default function DashboardScreen() {
   const confirmSignOut = () => {
     Alert.alert(
       "Sign out?",
-      "Unsynced data device par safe rahega aur isi account se dobara sign in karne par sync hoga.",
+      "Unsynced data will remain safe on this device and will sync when you sign in to this account again.",
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -469,7 +472,7 @@ export default function DashboardScreen() {
             <Ionicons name="flame-outline" size={23} color={COLORS.green} />
           </View>
           <View style={styles.fuelButtonCopy}>
-            <Text style={styles.actionTitle}>Add petrol refill</Text>
+            <Text style={styles.actionTitle}>Add fuel refill</Text>
             <Text style={styles.actionSubtitle}>Scan pump display, upload image or enter manually</Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color={COLORS.muted} />

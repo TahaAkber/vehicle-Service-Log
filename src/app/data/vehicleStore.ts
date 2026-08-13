@@ -98,17 +98,7 @@ type RemoteGarage = {
   updated_at: string;
 };
 
-const todayAtNoon = (daysAgo = 0) => {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() - daysAgo);
-  return date.toISOString();
-};
-
-const defaultVehicle: Vehicle = {
-  id: "yamaha-ybz-125dx",
-  name: "Yamaha YBZ 125DX",
-  odometer: 15420,
+const vehicleDefaults: Omit<Vehicle, "id" | "name" | "odometer"> = {
   dailyCommute: 20,
   oilType: "Semi-synthetic",
   oilCategory: "semi-synthetic",
@@ -116,50 +106,17 @@ const defaultVehicle: Vehicle = {
   oilViscosity: "20W-40",
   oilInterval: 1000,
   oilTimeIntervalMonths: 3,
-  oilLastChanged: 15270,
-  oilLastChangedAt: todayAtNoon(19),
+  oilLastChanged: 0,
+  oilLastChangedAt: new Date().toISOString(),
   ridingCondition: "normal",
-  chainInterval: 300,
-  chainLastServiced: 15240,
-  logs: [
-    {
-      id: "demo-fuel",
-      type: "fuel",
-      title: "Refueled 6.2 liters",
-      date: todayAtNoon(3),
-      odometer: 15365,
-      liters: 6.2,
-      amount: 1600,
-      unitPrice: 258.06,
-      fullTank: false,
-      source: "manual",
-    },
-    {
-      id: "demo-oil",
-      type: "oil",
-      title: "Engine oil changed",
-      date: todayAtNoon(19),
-      odometer: 15270,
-      note: "Semi-synthetic oil",
-      oilCategory: "semi-synthetic",
-      oilViscosity: "20W-40",
-      oilInterval: 1000,
-      oilTimeIntervalMonths: 3,
-      ridingCondition: "normal",
-    },
-    {
-      id: "demo-chain",
-      type: "chain",
-      title: "Chain lubed & cleaned",
-      date: todayAtNoon(32),
-      odometer: 15240,
-    },
-  ],
+  chainInterval: 500,
+  chainLastServiced: 0,
+  logs: [],
 };
 
 export const defaultGarage: Garage = {
-  activeVehicleId: defaultVehicle.id,
-  vehicles: [defaultVehicle],
+  activeVehicleId: "",
+  vehicles: [],
 };
 
 const createId = (prefix: string) =>
@@ -268,7 +225,7 @@ const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name
     ? new Date().toISOString()
     : oilDate.toISOString();
   return {
-    ...defaultVehicle,
+    ...vehicleDefaults,
     ...vehicle,
     logs,
     oilCategory: category,
@@ -285,16 +242,28 @@ const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name
   };
 };
 
-const normalizeGarage = (garage: Garage): Garage => ({
-  activeVehicleId: garage.activeVehicleId,
-  vehicles: garage.vehicles.map((vehicle) => normalizeVehicle(vehicle)),
-});
+const isUntouchedDemoVehicle = (vehicle: Vehicle) =>
+  vehicle.id === "yamaha-ybz-125dx" &&
+  vehicle.logs.length > 0 &&
+  vehicle.logs.every((log) => ["demo-fuel", "demo-oil", "demo-chain"].includes(log.id));
+
+const normalizeGarage = (garage: Garage): Garage => {
+  const vehicles = garage.vehicles
+    .map((vehicle) => normalizeVehicle(vehicle))
+    .filter((vehicle) => !isUntouchedDemoVehicle(vehicle));
+  return {
+    activeVehicleId: vehicles.some((vehicle) => vehicle.id === garage.activeVehicleId)
+      ? garage.activeVehicleId
+      : (vehicles[0]?.id ?? ""),
+    vehicles,
+  };
+};
 
 const parseCache = (stored: string | null): GarageCache | null => {
   if (!stored) return null;
   try {
     const parsed = JSON.parse(stored) as Partial<GarageCache> & Partial<Garage>;
-    if (parsed.garage?.vehicles?.length) {
+    if (parsed.garage && Array.isArray(parsed.garage.vehicles)) {
       return {
         garage: normalizeGarage(parsed.garage),
         updatedAt: parsed.updatedAt ?? new Date(0).toISOString(),
@@ -302,7 +271,7 @@ const parseCache = (stored: string | null): GarageCache | null => {
         lastSyncedAt: parsed.lastSyncedAt,
       };
     }
-    if (parsed.vehicles?.length && parsed.activeVehicleId) {
+    if (Array.isArray(parsed.vehicles) && typeof parsed.activeVehicleId === "string") {
       return {
         garage: normalizeGarage(parsed as Garage),
         updatedAt: new Date().toISOString(),
@@ -319,7 +288,7 @@ const asRemoteGarage = (value: unknown): RemoteGarage | null => {
   const row = Array.isArray(value) ? value[0] : value;
   if (!row || typeof row !== "object") return null;
   const candidate = row as Partial<RemoteGarage>;
-  if (!candidate.garage?.vehicles?.length || !candidate.client_updated_at || !candidate.updated_at) {
+  if (!candidate.garage || !Array.isArray(candidate.garage.vehicles) || !candidate.client_updated_at || !candidate.updated_at) {
     return null;
   }
   return candidate as RemoteGarage;
