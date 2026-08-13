@@ -68,6 +68,8 @@ export type VehicleInput = Pick<
   | "oilViscosity"
   | "oilInterval"
   | "oilTimeIntervalMonths"
+  | "oilLastChanged"
+  | "oilLastChangedAt"
   | "ridingCondition"
   | "chainInterval"
 >;
@@ -144,8 +146,6 @@ const createId = (prefix: string) =>
 export const createVehicle = (input: VehicleInput): Vehicle => ({
   id: createId("vehicle"),
   ...input,
-  oilLastChanged: input.odometer,
-  oilLastChangedAt: new Date().toISOString(),
   chainLastServiced: input.odometer,
   logs: [
     {
@@ -160,11 +160,18 @@ export const createVehicle = (input: VehicleInput): Vehicle => ({
 
 export const createLogId = () => createId("log");
 
+export const sortLogsNewest = (logs: ServiceLog[]) =>
+  [...logs].sort((a, b) => {
+    const aTime = new Date(a.date).getTime();
+    const bTime = new Date(b.date).getTime();
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  });
+
 export const getHealth = (odometer: number, lastService: number, interval: number) => {
   const used = Math.max(0, odometer - lastService);
   const remaining = Math.max(0, interval - used);
   const percent = Math.max(0, Math.min(100, Math.round((remaining / interval) * 100)));
-  return { percent, remaining, overdue: used > interval };
+  return { percent, remaining, overdue: used >= interval };
 };
 
 export const oilCategoryLabel = (category: OilCategory) =>
@@ -230,9 +237,14 @@ const inferOilCategory = (oilType?: string): OilCategory => {
 };
 
 const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name" | "odometer">): Vehicle => {
-  const logs = Array.isArray(vehicle.logs) ? vehicle.logs : [];
+  const logs = sortLogsNewest(Array.isArray(vehicle.logs) ? vehicle.logs : []);
   const latestOilLog = logs.find((log) => log.type === "oil");
   const category = vehicle.oilCategory ?? inferOilCategory(vehicle.oilType);
+  const oilDateCandidate = vehicle.oilLastChangedAt ?? latestOilLog?.date;
+  const oilDate = oilDateCandidate ? new Date(oilDateCandidate) : new Date();
+  const oilLastChangedAt = Number.isNaN(oilDate.getTime())
+    ? new Date().toISOString()
+    : oilDate.toISOString();
   return {
     ...defaultVehicle,
     ...vehicle,
@@ -246,8 +258,7 @@ const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name
       vehicle.oilTimeIntervalMonths && vehicle.oilTimeIntervalMonths > 0
         ? vehicle.oilTimeIntervalMonths
         : 3,
-    oilLastChangedAt:
-      vehicle.oilLastChangedAt ?? latestOilLog?.date ?? new Date().toISOString(),
+    oilLastChangedAt,
     ridingCondition: vehicle.ridingCondition ?? "normal",
   };
 };

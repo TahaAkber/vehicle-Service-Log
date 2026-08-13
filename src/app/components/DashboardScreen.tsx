@@ -5,6 +5,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -33,6 +34,7 @@ import {
   getHealth,
   getOilHealth,
   oilCategoryLabel,
+  sortLogsNewest,
   type LogType,
   type Vehicle,
   type VehicleInput,
@@ -87,6 +89,24 @@ function HealthCard({ title, subtitle, value, accent, icon }: HealthCardProps) {
   );
 }
 
+function formatSavedAt(date?: string) {
+  if (!date) return "Saved on this device";
+  const savedAt = new Date(date);
+  if (Number.isNaN(savedAt.getTime())) return "Saved on this device";
+  const today = new Date();
+  if (savedAt.toDateString() === today.toDateString()) {
+    return `Updated today, ${new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(savedAt)}`;
+  }
+  return `Updated ${new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(savedAt)}`;
+}
+
 export default function DashboardScreen() {
   const {
     garage,
@@ -131,6 +151,16 @@ export default function DashboardScreen() {
     month: "short",
     year: "numeric",
   }).format(new Date(oilHealth.dueDate));
+  const latestReadingLog = vehicle.logs.find(
+    (log) => Math.abs(log.odometer - vehicle.odometer) < 0.001,
+  );
+  const readingBadge =
+    latestReadingLog?.type === "odometer" &&
+    (latestReadingLog.source === "camera" || latestReadingLog.source === "gallery")
+      ? "Scanned"
+      : latestReadingLog?.type === "odometer" && latestReadingLog.source === "manual"
+        ? "Manual"
+        : "Saved";
 
   const healthColor = (percent: number) =>
     percent > 50 ? COLORS.green : percent > 20 ? COLORS.amber : COLORS.red;
@@ -141,7 +171,7 @@ export default function DashboardScreen() {
   };
 
   const handleScanSuccess = (reading: number, source: ScanSource) => {
-    const nextReading = Math.round(reading);
+    const nextReading = Number(reading.toFixed(1));
     setScannerMode(null);
     if (nextReading < vehicle.odometer) {
       Alert.alert(
@@ -153,22 +183,23 @@ export default function DashboardScreen() {
     updateVehicle(vehicle.id, (current) => ({
       ...current,
       odometer: nextReading,
-      logs: [
+      logs: sortLogsNewest([
         {
           id: createLogId(),
           type: "odometer",
-          title: "Odometer scanned",
+          title: source === "manual" ? "Odometer entered manually" : "Odometer scanned",
           date: new Date().toISOString(),
           odometer: nextReading,
           source,
         },
         ...current.logs,
-      ],
+      ]),
     }));
     Alert.alert("Reading updated", `${nextReading.toLocaleString()} km save ho gaye.`);
   };
 
   const handleSaveLog = (input: LogInput) => {
+    const logDate = input.date ?? new Date().toISOString();
     const titles = {
       oil: "Engine oil changed",
       chain: "Chain lubed & cleaned",
@@ -180,7 +211,7 @@ export default function DashboardScreen() {
       odometer: Math.max(current.odometer, input.odometer),
       oilLastChanged: input.type === "oil" ? input.odometer : current.oilLastChanged,
       oilLastChangedAt:
-        input.type === "oil" ? new Date().toISOString() : current.oilLastChangedAt,
+        input.type === "oil" ? logDate : current.oilLastChangedAt,
       oilCategory:
         input.type === "oil" && input.oilCategory ? input.oilCategory : current.oilCategory,
       oilType:
@@ -209,12 +240,12 @@ export default function DashboardScreen() {
           : current.ridingCondition,
       chainLastServiced:
         input.type === "chain" ? input.odometer : current.chainLastServiced,
-      logs: [
+      logs: sortLogsNewest([
         {
           id: createLogId(),
           type: input.type,
           title: titles[input.type] || "Service logged",
-          date: new Date().toISOString(),
+          date: logDate,
           odometer: input.odometer,
           liters: input.liters,
           amount: input.amount,
@@ -230,7 +261,7 @@ export default function DashboardScreen() {
           note: input.type === "service" ? undefined : input.note || undefined,
         },
         ...current.logs,
-      ],
+      ]),
     }));
     setSheet(null);
     Alert.alert("Log saved", `${titles[input.type]} successfully add ho gaya.`);
@@ -275,26 +306,6 @@ export default function DashboardScreen() {
     );
   };
 
-  if (scannerMode === "odometer") {
-    return (
-      <OdometerScanner
-        currentOdometer={vehicle.odometer}
-        onScanSuccess={handleScanSuccess}
-        onCancel={() => setScannerMode(null)}
-      />
-    );
-  }
-
-  if (scannerMode === "fuel") {
-    return (
-      <FuelScanner
-        currentOdometer={vehicle.odometer}
-        onScanSuccess={handleFuelScanSuccess}
-        onCancel={() => setScannerMode(null)}
-      />
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
       <StatusBar style="light" />
@@ -318,13 +329,10 @@ export default function DashboardScreen() {
             <Ionicons name="chevron-down" size={14} color={COLORS.muted} />
           </Pressable>
 
-          <Pressable
-            style={styles.onlinePill}
-            onPress={() => Alert.alert("All changes saved", "Vehicle data is stored on this device.")}
-          >
-            <Ionicons name="cloud-done" size={13} color={COLORS.green} />
-            <Text style={styles.onlineText}>Synced</Text>
-          </Pressable>
+          <View style={styles.onlinePill}>
+            <Ionicons name="phone-portrait-outline" size={13} color={COLORS.green} />
+            <Text style={styles.onlineText}>On device</Text>
+          </View>
         </View>
 
         <LinearGradient
@@ -338,15 +346,16 @@ export default function DashboardScreen() {
           <View style={styles.cardTopRow}>
             <View>
               <Text style={styles.odometerLabel}>TOTAL DISTANCE</Text>
-              <Text style={styles.lastUpdated}>Updated just now</Text>
+              <Text style={styles.lastUpdated}>{formatSavedAt(latestReadingLog?.date)}</Text>
             </View>
-            <Pressable
-              style={styles.verifiedBadge}
-              onPress={() => Alert.alert("Verified reading", "Latest reading was accepted and saved successfully.")}
-            >
-              <Ionicons name="shield-checkmark" size={14} color="#FFFFFF" />
-              <Text style={styles.verifiedText}>Verified</Text>
-            </Pressable>
+            <View style={styles.verifiedBadge}>
+              <Ionicons
+                name={readingBadge === "Scanned" ? "scan-circle-outline" : "checkmark-circle-outline"}
+                size={14}
+                color="#FFFFFF"
+              />
+              <Text style={styles.verifiedText}>{readingBadge}</Text>
+            </View>
           </View>
           <View style={styles.odometerValueRow}>
             <Text style={styles.odometerValue}>{formattedOdometer}</Text>
@@ -526,6 +535,34 @@ export default function DashboardScreen() {
         vehicle={vehicle}
         onClose={() => setSheet(null)}
       />
+      <Modal
+        visible={scannerMode === "odometer"}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setScannerMode(null)}
+      >
+        {scannerMode === "odometer" ? (
+          <OdometerScanner
+            currentOdometer={vehicle.odometer}
+            onScanSuccess={handleScanSuccess}
+            onCancel={() => setScannerMode(null)}
+          />
+        ) : null}
+      </Modal>
+      <Modal
+        visible={scannerMode === "fuel"}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={() => setScannerMode(null)}
+      >
+        {scannerMode === "fuel" ? (
+          <FuelScanner
+            currentOdometer={vehicle.odometer}
+            onScanSuccess={handleFuelScanSuccess}
+            onCancel={() => setScannerMode(null)}
+          />
+        ) : null}
+      </Modal>
     </SafeAreaView>
   );
 }

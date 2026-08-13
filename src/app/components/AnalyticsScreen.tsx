@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { getHealth, getOilHealth, useVehicleStore } from "../data/vehicleStore";
@@ -47,7 +48,8 @@ function MetricCard({
 }
 
 export default function AnalyticsScreen() {
-  const { activeVehicle: vehicle, isLoading } = useVehicleStore();
+  const { garage, activeVehicle: vehicle, isLoading, selectVehicle } = useVehicleStore();
+  const [showVehicles, setShowVehicles] = useState(false);
 
   if (isLoading || !vehicle) {
     return (
@@ -58,9 +60,12 @@ export default function AnalyticsScreen() {
   }
 
   const fuelLogs = vehicle.logs.filter((log) => log.type === "fuel");
-  const fullTankLogs = fuelLogs
-    .filter((log) => log.fullTank && log.liters)
-    .sort((a, b) => a.odometer - b.odometer);
+  const orderedFuelLogs = fuelLogs
+    .filter((log) => log.liters && log.liters > 0)
+    .sort(
+      (a, b) =>
+        a.odometer - b.odometer || new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
   const serviceLogs = vehicle.logs.filter((log) => ["oil", "chain", "service"].includes(log.type));
   const totalFuel = fuelLogs.reduce((sum, log) => sum + (log.liters ?? 0), 0);
   const totalSpend = fuelLogs.reduce((sum, log) => sum + (log.amount ?? 0), 0);
@@ -69,12 +74,24 @@ export default function AnalyticsScreen() {
     : vehicle.odometer;
   const trackedDistance = Math.max(0, vehicle.odometer - oldestReading);
   const fuelEfficiency = (() => {
-    if (fullTankLogs.length < 2) return null;
+    let previousFullOdometer: number | null = null;
+    let intervalFuel = 0;
     let distance = 0;
     let consumedFuel = 0;
-    for (let index = 1; index < fullTankLogs.length; index += 1) {
-      distance += fullTankLogs[index].odometer - fullTankLogs[index - 1].odometer;
-      consumedFuel += fullTankLogs[index].liters ?? 0;
+
+    for (const log of orderedFuelLogs) {
+      if (previousFullOdometer === null) {
+        if (log.fullTank) previousFullOdometer = log.odometer;
+        continue;
+      }
+
+      intervalFuel += log.liters ?? 0;
+      if (log.fullTank && log.odometer > previousFullOdometer) {
+        distance += log.odometer - previousFullOdometer;
+        consumedFuel += intervalFuel;
+        previousFullOdometer = log.odometer;
+        intervalFuel = 0;
+      }
     }
     return consumedFuel > 0 ? distance / consumedFuel : null;
   })();
@@ -92,11 +109,34 @@ export default function AnalyticsScreen() {
             <Text style={styles.eyebrow}>VEHICLE INSIGHTS</Text>
             <Text style={styles.title}>Analytics</Text>
           </View>
-          <View style={styles.vehicleBadge}>
+          <Pressable style={styles.vehicleBadge} onPress={() => setShowVehicles((value) => !value)}>
             <Ionicons name="bicycle-outline" size={16} color={C.cyan} />
             <Text style={styles.vehicleBadgeText} numberOfLines={1}>{vehicle.name}</Text>
-          </View>
+            <Ionicons name={showVehicles ? "chevron-up" : "chevron-down"} size={13} color={C.muted} />
+          </Pressable>
         </View>
+
+        {showVehicles ? (
+          <View style={styles.vehicleMenu}>
+            {garage.vehicles.map((item) => (
+              <Pressable
+                key={item.id}
+                style={[styles.vehicleOption, item.id === vehicle.id && styles.vehicleOptionSelected]}
+                onPress={() => {
+                  selectVehicle(item.id);
+                  setShowVehicles(false);
+                }}
+              >
+                <Ionicons name="bicycle-outline" size={17} color={item.id === vehicle.id ? C.cyan : C.muted} />
+                <View style={styles.vehicleOptionCopy}>
+                  <Text style={styles.vehicleOptionTitle}>{item.name}</Text>
+                  <Text style={styles.vehicleOptionSubtitle}>{item.logs.length} saved entries</Text>
+                </View>
+                {item.id === vehicle.id ? <Ionicons name="checkmark-circle" size={19} color={C.green} /> : null}
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         <LinearGradient
           colors={["#173B80", "#12617B"]}
@@ -112,7 +152,7 @@ export default function AnalyticsScreen() {
                 <Text style={styles.heroUnit}>km/L</Text>
               </View>
             ) : (
-              <Text style={styles.heroPending}>Log one more refuel to calculate</Text>
+              <Text style={styles.heroPending}>Mark two refuels as full tank to calculate</Text>
             )}
           </View>
           <View style={styles.heroIcon}>
@@ -231,6 +271,12 @@ const styles = StyleSheet.create({
   title: { marginTop: 4, color: C.text, fontSize: 28, fontWeight: "800", letterSpacing: -0.7 },
   vehicleBadge: { maxWidth: "49%", flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 8, borderRadius: 12, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
   vehicleBadgeText: { flexShrink: 1, color: "#C9D3E1", fontSize: 10, fontWeight: "700" },
+  vehicleMenu: { marginTop: -10, marginBottom: 16, padding: 7, gap: 5, borderRadius: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.border },
+  vehicleOption: { minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 11 },
+  vehicleOptionSelected: { backgroundColor: "#16253A" },
+  vehicleOptionCopy: { flex: 1 },
+  vehicleOptionTitle: { color: C.text, fontSize: 12, fontWeight: "700" },
+  vehicleOptionSubtitle: { marginTop: 2, color: C.muted, fontSize: 9 },
   hero: { minHeight: 145, flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 21, borderRadius: 22, overflow: "hidden" },
   heroLabel: { color: "#C6E8FA", fontSize: 9, fontWeight: "900", letterSpacing: 1.1 },
   heroValueRow: { flexDirection: "row", alignItems: "baseline", marginTop: 10 },

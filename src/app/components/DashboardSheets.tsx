@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -88,6 +88,36 @@ function OptionChips<T extends string>({
   );
 }
 
+function parseDateInput(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return date;
+}
+
+function formatDateInput(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isFutureDate(date: Date) {
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+  return date.getTime() > endOfToday.getTime();
+}
+
 const logMeta: Record<LogType, { label: string; icon: IconName; color: string }> = {
   oil: { label: "Oil change", icon: "water-outline", color: C.blue },
   chain: { label: "Chain service", icon: "link-outline", color: C.amber },
@@ -111,6 +141,7 @@ export type LogInput = {
   oilInterval?: number;
   oilTimeIntervalMonths?: number;
   ridingCondition?: RidingCondition;
+  date?: string;
 };
 
 type SheetProps = {
@@ -196,10 +227,24 @@ export function GarageSheet({
                   <Text style={styles.activeBadgeText}>ACTIVE</Text>
                 </View>
               ) : null}
-              <Pressable style={styles.iconButton} onPress={() => onEdit(vehicle)} hitSlop={6}>
+              <Pressable
+                style={styles.iconButton}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onEdit(vehicle);
+                }}
+                hitSlop={6}
+              >
                 <Ionicons name="pencil-outline" size={17} color={C.muted} />
               </Pressable>
-              <Pressable style={styles.iconButton} onPress={() => onDelete(vehicle)} hitSlop={6}>
+              <Pressable
+                style={styles.iconButton}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onDelete(vehicle);
+                }}
+                hitSlop={6}
+              >
                 <Ionicons name="trash-outline" size={17} color={C.red} />
               </Pressable>
             </Pressable>
@@ -239,6 +284,28 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
   const [oilMonths, setOilMonths] = useState(String(vehicle?.oilTimeIntervalMonths ?? 3));
   const [ridingCondition, setRidingCondition] = useState<RidingCondition>(vehicle?.ridingCondition ?? "normal");
   const [chainInterval, setChainInterval] = useState(String(vehicle?.chainInterval ?? 500));
+  const [lastOilOdometer, setLastOilOdometer] = useState(
+    String(vehicle?.oilLastChanged ?? vehicle?.odometer ?? ""),
+  );
+  const [lastOilDate, setLastOilDate] = useState(
+    formatDateInput(new Date(vehicle?.oilLastChangedAt ?? Date.now())),
+  );
+
+  useEffect(() => {
+    if (!visible) return;
+    setName(vehicle?.name ?? "");
+    setOdometer(String(vehicle?.odometer ?? ""));
+    setDailyCommute(String(vehicle?.dailyCommute ?? 20));
+    setOilCategory(vehicle?.oilCategory ?? "semi-synthetic");
+    setOilBrand(vehicle?.oilBrand ?? "");
+    setOilViscosity(vehicle?.oilViscosity ?? "");
+    setOilInterval(String(vehicle?.oilInterval ?? 1000));
+    setOilMonths(String(vehicle?.oilTimeIntervalMonths ?? 3));
+    setRidingCondition(vehicle?.ridingCondition ?? "normal");
+    setChainInterval(String(vehicle?.chainInterval ?? 500));
+    setLastOilOdometer(String(vehicle?.oilLastChanged ?? vehicle?.odometer ?? ""));
+    setLastOilDate(formatDateInput(new Date(vehicle?.oilLastChangedAt ?? Date.now())));
+  }, [vehicle, visible]);
 
   const submit = () => {
     const parsedOdometer = Number(odometer);
@@ -246,19 +313,46 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
     const parsedOilInterval = Number(oilInterval);
     const parsedOilMonths = Number(oilMonths);
     const parsedChainInterval = Number(chainInterval);
+    const parsedLastOilOdometer = Number(lastOilOdometer || odometer);
+    const parsedLastOilDate = parseDateInput(lastOilDate);
 
-    if (!name.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
+    if (!name.trim() || !odometer.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
       Alert.alert("Missing details", "Vehicle name aur valid odometer reading enter karein.");
       return;
     }
-    if (parsedOilInterval <= 0 || parsedOilMonths <= 0 || parsedChainInterval <= 0 || parsedCommute < 0) {
+    if (
+      !Number.isFinite(parsedOilInterval) ||
+      parsedOilInterval < 1 ||
+      !Number.isFinite(parsedOilMonths) ||
+      parsedOilMonths < 1 ||
+      !Number.isFinite(parsedChainInterval) ||
+      parsedChainInterval < 1 ||
+      !Number.isFinite(parsedCommute) ||
+      parsedCommute < 0
+    ) {
       Alert.alert("Invalid interval", "Service intervals zero se greater hone chahiye.");
+      return;
+    }
+    if (
+      !Number.isFinite(parsedLastOilOdometer) ||
+      parsedLastOilOdometer < 0 ||
+      parsedLastOilOdometer > parsedOdometer
+    ) {
+      Alert.alert("Invalid oil reading", "Last oil-change reading current odometer se greater nahi ho sakti.");
+      return;
+    }
+    if (!parsedLastOilDate || isFutureDate(parsedLastOilDate)) {
+      Alert.alert("Invalid date", "Last oil-change date YYYY-MM-DD format mein enter karein.");
+      return;
+    }
+    if (vehicle && parsedOdometer < vehicle.odometer) {
+      Alert.alert("Odometer cannot decrease", `Current saved reading ${vehicle.odometer.toLocaleString()} km hai.`);
       return;
     }
 
     onSave({
       name: name.trim(),
-      odometer: Math.round(parsedOdometer),
+      odometer: Number(parsedOdometer.toFixed(1)),
       dailyCommute: Math.round(parsedCommute),
       oilType: oilCategoryLabel(oilCategory),
       oilCategory,
@@ -266,6 +360,8 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
       oilViscosity: oilViscosity.trim(),
       oilInterval: Math.round(parsedOilInterval),
       oilTimeIntervalMonths: Math.round(parsedOilMonths),
+      oilLastChanged: Number(parsedLastOilOdometer.toFixed(1)),
+      oilLastChangedAt: parsedLastOilDate.toISOString(),
       ridingCondition,
       chainInterval: Math.round(parsedChainInterval),
     });
@@ -331,6 +427,25 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
           />
         </View>
         <Text style={styles.manualIntervalHint}>Aapka entered KM interval final hai. Category is value ko override nahi karegi.</Text>
+        <View style={styles.twoColumns}>
+          <Field
+            compact
+            label="LAST OIL CHANGE (KM)"
+            value={lastOilOdometer}
+            onChangeText={setLastOilOdometer}
+            keyboardType="decimal-pad"
+            placeholder={odometer || "0"}
+          />
+          <Field
+            compact
+            label="CHANGE DATE"
+            value={lastOilDate}
+            onChangeText={setLastOilDate}
+            keyboardType="numbers-and-punctuation"
+            placeholder="YYYY-MM-DD"
+            maxLength={10}
+          />
+        </View>
         <Text style={styles.fieldLabel}>RIDING CONDITION</Text>
         <OptionChips
           options={ridingConditionOptions}
@@ -395,6 +510,25 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
   const [oilInterval, setOilInterval] = useState(String(vehicle.oilInterval));
   const [oilMonths, setOilMonths] = useState(String(vehicle.oilTimeIntervalMonths));
   const [ridingCondition, setRidingCondition] = useState<RidingCondition>(vehicle.ridingCondition);
+  const [logDate, setLogDate] = useState(formatDateInput(new Date()));
+
+  useEffect(() => {
+    if (!visible) return;
+    setType(initialType);
+    setOdometer(String(vehicle.odometer));
+    setLiters("");
+    setAmount("");
+    setUnitPrice("");
+    setFullTank(false);
+    setNote("");
+    setOilCategory(vehicle.oilCategory);
+    setOilBrand(vehicle.oilBrand);
+    setOilViscosity(vehicle.oilViscosity);
+    setOilInterval(String(vehicle.oilInterval));
+    setOilMonths(String(vehicle.oilTimeIntervalMonths));
+    setRidingCondition(vehicle.ridingCondition);
+    setLogDate(formatDateInput(new Date()));
+  }, [initialType, vehicle, visible]);
 
   const submit = () => {
     const parsedOdometer = Number(odometer);
@@ -403,8 +537,13 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
     let parsedRate = Number(unitPrice);
     const parsedOilInterval = Number(oilInterval);
     const parsedOilMonths = Number(oilMonths);
-    if (!Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
+    const parsedLogDate = parseDateInput(logDate);
+    if (!odometer.trim() || !Number.isFinite(parsedOdometer) || parsedOdometer < 0) {
       Alert.alert("Invalid odometer", "Valid kilometer reading enter karein.");
+      return;
+    }
+    if (!parsedLogDate || isFutureDate(parsedLogDate)) {
+      Alert.alert("Invalid date", "Log date YYYY-MM-DD format mein enter karein aur future date use na karein.");
       return;
     }
     if (type === "fuel") {
@@ -423,13 +562,19 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
       Alert.alert("Service details", "Service ka short description enter karein.");
       return;
     }
-    if (type === "oil" && (parsedOilInterval <= 0 || parsedOilMonths <= 0)) {
+    if (
+      type === "oil" &&
+      (!Number.isFinite(parsedOilInterval) ||
+        parsedOilInterval < 1 ||
+        !Number.isFinite(parsedOilMonths) ||
+        parsedOilMonths < 1)
+    ) {
       Alert.alert("Invalid oil interval", "Kilometer interval aur maximum months zero se greater hone chahiye.");
       return;
     }
     onSave({
       type,
-      odometer: Math.round(parsedOdometer),
+      odometer: Number(parsedOdometer.toFixed(1)),
       liters: type === "fuel" ? parsedLiters : undefined,
       amount: type === "fuel" ? Number(parsedAmount.toFixed(2)) : undefined,
       unitPrice: type === "fuel" ? Number(parsedRate.toFixed(2)) : undefined,
@@ -442,6 +587,7 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
       oilInterval: type === "oil" ? Math.round(parsedOilInterval) : undefined,
       oilTimeIntervalMonths: type === "oil" ? Math.round(parsedOilMonths) : undefined,
       ridingCondition: type === "oil" ? ridingCondition : undefined,
+      date: parsedLogDate.toISOString(),
     });
   };
 
@@ -476,6 +622,14 @@ export function LogSheet({ visible, vehicle, initialType, onClose, onSave }: Log
           value={odometer}
           onChangeText={setOdometer}
           keyboardType="numeric"
+        />
+        <Field
+          label="LOG DATE"
+          value={logDate}
+          onChangeText={setLogDate}
+          keyboardType="numbers-and-punctuation"
+          placeholder="YYYY-MM-DD"
+          maxLength={10}
         />
         {type === "oil" ? (
           <>

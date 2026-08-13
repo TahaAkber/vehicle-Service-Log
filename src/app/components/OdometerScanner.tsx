@@ -70,15 +70,21 @@ function parseOdometer(result: TextRecognitionResult, current: number) {
     .sort((a, b) => a.top - b.top);
 
   const candidates = lines.flatMap((line, lineIndex) =>
-    (line.text.match(/\d[\d\s,.]{2,}\d|\d{3,7}/g) ?? []).map((token) => {
+    (line.text.match(/\d[\d\s,.]{2,}\d|\d{3,7}/g) ?? []).flatMap((token) => {
       const digits = token.replace(/\D/g, "");
-      const value = Number(digits);
-      let score = digits.length >= 4 && digits.length <= 7 ? 6 : 0;
-      score += Math.max(0, 4 - lineIndex);
-      if (value >= current) score += 4;
-      if (/km|odo/i.test(line.text)) score += 5;
-      if (value > 9999999 || value < 1) score -= 8;
-      return { value, score };
+      const rawValue = Number(digits);
+      const values = digits.length === 6 ? [rawValue / 10, rawValue] : [rawValue];
+      return values.map((value, variantIndex) => {
+        let score = digits.length >= 4 && digits.length <= 7 ? 6 : 0;
+        score += Math.max(0, 4 - lineIndex);
+        if (value >= current && value - current <= 5000) score += 6;
+        if (value < current) score -= 5;
+        if (current > 0 && value > current * 5) score -= 6;
+        if (/km|odo/i.test(line.text)) score += 5;
+        if (digits.length === 6 && variantIndex === 0) score += 2;
+        if (value > 9999999 || value < 1) score -= 8;
+        return { value: Number(value.toFixed(1)), score };
+      });
     }),
   );
 
@@ -230,8 +236,15 @@ function SmartScanner({
   const openCamera = async () => {
     if (!permission) return;
     if (!permission.granted) {
+      if (!permission.canAskAgain) {
+        setStep("camera");
+        return;
+      }
       const next = await requestPermission();
-      if (!next.granted) return;
+      if (!next.granted) {
+        setStep("camera");
+        return;
+      }
     }
     setStep("camera");
   };
@@ -260,7 +273,14 @@ function SmartScanner({
     }
 
     if (mode === "odometer") {
-      onOdometerSuccess?.(Math.round(parsedOdometer), source);
+      if (parsedOdometer < currentOdometer) {
+        Alert.alert(
+          "Reading cannot decrease",
+          `Current saved odometer ${currentOdometer.toLocaleString()} km hai. Reading correct karke dobara save karein.`,
+        );
+        return;
+      }
+      onOdometerSuccess?.(Number(parsedOdometer.toFixed(1)), source);
       return;
     }
 
@@ -280,7 +300,7 @@ function SmartScanner({
     if (!hasRate) parsedRate = parsedAmount / parsedLiters;
 
     onFuelSuccess?.({
-      odometer: Math.round(parsedOdometer),
+      odometer: Number(parsedOdometer.toFixed(1)),
       amount: Number(parsedAmount.toFixed(2)),
       liters: Number(parsedLiters.toFixed(3)),
       unitPrice: Number(parsedRate.toFixed(2)),
