@@ -1,54 +1,83 @@
 {
   "expo": {
-    "name": "vehicle-Service-Log",
-    "slug": "vehicle-Service-Log",
+    "name": "Vehicle Service Logs",
+    "slug": "vehicle-service-logs",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/app-icon.png",
     "scheme": "vehicleservicelog",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/app-icon.png",
+      "bundleIdentifier": "com.anonymous.vehicleServiceLog"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#172333",
+        "foregroundImage": "./assets/images/app-icon.png"
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA",
+        "android.permission.CAMERA"
+      ],
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
       "package": "com.anonymous.vehicleServiceLog"
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/app-icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#172333",
+          "image": "./assets/images/app-icon.png",
+          "imageWidth": 180
         }
       ],
       "expo-dev-client",
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow app access to scan odometer numbers."
+          "cameraPermission": "Allow app access to scan odometer and fuel pump displays.",
+          "recordAudioAndroid": false
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow app access to select odometer and fuel pump images."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow app access to show and measure your current ride.",
+          "locationAlwaysAndWhenInUsePermission": "Allow app access to detect and measure vehicle trips in the background.",
+          "motionUsagePermission": "Allow app access to distinguish vehicle movement from walking.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidMotionActivityEnabled": true
+        }
+      ],
+      "expo-web-browser",
+      "expo-sqlite"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "018ec13e-f586-4498-b5cc-de6c18c0ce4d"
+      }
+    },
+    "owner": "tahaakber"
   }
 }
