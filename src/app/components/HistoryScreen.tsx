@@ -78,7 +78,7 @@ export default function HistoryScreen() {
           <Text style={styles.title}>History</Text>
         </View>
         <Pressable style={styles.vehicleButton} onPress={() => setShowVehicles((value) => !value)}>
-          <Ionicons name="bicycle-outline" size={16} color={C.cyan} />
+          <Ionicons name={vehicle.vehicleKind === "bike" ? "bicycle-outline" : "car-outline"} size={16} color={C.cyan} />
           <Text style={styles.vehicleButtonText} numberOfLines={1}>{vehicle.name}</Text>
           <Ionicons name={showVehicles ? "chevron-up" : "chevron-down"} size={14} color={C.muted} />
         </Pressable>
@@ -96,7 +96,7 @@ export default function HistoryScreen() {
               }}
             >
               <View style={styles.vehicleOptionIcon}>
-                <Ionicons name="bicycle-outline" size={18} color={item.id === vehicle.id ? C.cyan : C.muted} />
+                <Ionicons name={item.vehicleKind === "bike" ? "bicycle-outline" : "car-outline"} size={18} color={item.id === vehicle.id ? C.cyan : C.muted} />
               </View>
               <View style={styles.vehicleOptionCopy}>
                 <Text style={styles.vehicleOptionTitle}>{item.name}</Text>

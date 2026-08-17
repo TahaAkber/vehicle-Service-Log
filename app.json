@@ -53,6 +53,18 @@
           "photosPermission": "Allow app access to select odometer and fuel pump images."
         }
       ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow app access to show and measure your current ride.",
+          "locationAlwaysAndWhenInUsePermission": "Allow app access to detect and measure vehicle trips in the background.",
+          "motionUsagePermission": "Allow app access to distinguish vehicle movement from walking.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "isAndroidMotionActivityEnabled": true
+        }
+      ],
       "expo-web-browser",
       "expo-sqlite"
     ],

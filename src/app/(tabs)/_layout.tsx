@@ -16,6 +16,7 @@ const icons: Record<string, { active: IconName; inactive: IconName }> = {
   index: { active: "home", inactive: "home-outline" },
   analytics: { active: "stats-chart", inactive: "stats-chart-outline" },
   history: { active: "time", inactive: "time-outline" },
+  ride: { active: "navigate", inactive: "navigate-outline" },
 };
 
 export default function TabLayout() {
@@ -52,6 +53,7 @@ export default function TabLayout() {
       })}
     >
       <Tabs.Screen name="index" options={{ title: "Home" }} />
+      <Tabs.Screen name="ride" options={{ title: "Ride" }} />
       <Tabs.Screen name="analytics" options={{ title: "Analytics" }} />
       <Tabs.Screen name="history" options={{ title: "History" }} />
     </Tabs>

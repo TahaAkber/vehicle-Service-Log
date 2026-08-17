@@ -100,8 +100,17 @@ export default function AnalyticsScreen() {
   })();
   const oil = getOilHealth(vehicle);
   const chain = getHealth(vehicle.odometer, vehicle.chainLastServiced, vehicle.chainInterval);
-  const maxBar = Math.max(vehicle.dailyCommute * 7, trackedDistance, 1);
-  const weeklyProjection = vehicle.dailyCommute * 7;
+  const now = new Date();
+  const todayCommute = vehicle.commuteTrips
+    .filter((trip) => new Date(trip.startedAt).toDateString() === now.toDateString())
+    .reduce((sum, trip) => sum + trip.distanceKm, 0);
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - 6);
+  weekStart.setHours(0, 0, 0, 0);
+  const weeklyTracked = vehicle.commuteTrips
+    .filter((trip) => new Date(trip.startedAt) >= weekStart)
+    .reduce((sum, trip) => sum + trip.distanceKm, 0);
+  const maxBar = Math.max(vehicle.dailyCommute, todayCommute, weeklyTracked, trackedDistance, 1);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top"]}>
@@ -113,7 +122,7 @@ export default function AnalyticsScreen() {
             <Text style={styles.title}>Analytics</Text>
           </View>
           <Pressable style={styles.vehicleBadge} onPress={() => setShowVehicles((value) => !value)}>
-            <Ionicons name="bicycle-outline" size={16} color={C.cyan} />
+            <Ionicons name={vehicle.vehicleKind === "bike" ? "bicycle-outline" : "car-outline"} size={16} color={C.cyan} />
             <Text style={styles.vehicleBadgeText} numberOfLines={1}>{vehicle.name}</Text>
             <Ionicons name={showVehicles ? "chevron-up" : "chevron-down"} size={13} color={C.muted} />
           </Pressable>
@@ -130,7 +139,7 @@ export default function AnalyticsScreen() {
                   setShowVehicles(false);
                 }}
               >
-                <Ionicons name="bicycle-outline" size={17} color={item.id === vehicle.id ? C.cyan : C.muted} />
+                <Ionicons name={item.vehicleKind === "bike" ? "bicycle-outline" : "car-outline"} size={17} color={item.id === vehicle.id ? C.cyan : C.muted} />
                 <View style={styles.vehicleOptionCopy}>
                   <Text style={styles.vehicleOptionTitle}>{item.name}</Text>
                   <Text style={styles.vehicleOptionSubtitle}>{item.logs.length} saved entries</Text>
@@ -200,27 +209,27 @@ export default function AnalyticsScreen() {
           <View style={styles.chartRow}>
             <View style={styles.chartCopy}>
               <Text style={styles.chartLabel}>Daily commute</Text>
-              <Text style={styles.chartValue}>{vehicle.dailyCommute} km</Text>
+              <Text style={styles.chartValue}>{todayCommute.toFixed(1)} km</Text>
             </View>
             <View style={styles.chartTrack}>
               <View
                 style={[
                   styles.chartFill,
-                  { width: `${Math.max(4, (vehicle.dailyCommute / maxBar) * 100)}%`, backgroundColor: C.cyan },
+                  { width: `${Math.max(4, (todayCommute / maxBar) * 100)}%`, backgroundColor: C.cyan },
                 ]}
               />
             </View>
           </View>
           <View style={styles.chartRow}>
             <View style={styles.chartCopy}>
-              <Text style={styles.chartLabel}>Weekly projection</Text>
-              <Text style={styles.chartValue}>{weeklyProjection} km</Text>
+              <Text style={styles.chartLabel}>Last 7 days (GPS)</Text>
+              <Text style={styles.chartValue}>{weeklyTracked.toFixed(1)} km</Text>
             </View>
             <View style={styles.chartTrack}>
               <View
                 style={[
                   styles.chartFill,
-                  { width: `${Math.max(4, (weeklyProjection / maxBar) * 100)}%`, backgroundColor: C.blue },
+                  { width: `${Math.max(4, (weeklyTracked / maxBar) * 100)}%`, backgroundColor: C.blue },
                 ]}
               />
             </View>

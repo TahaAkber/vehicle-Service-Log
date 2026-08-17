@@ -14,6 +14,9 @@ import {
 
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../../providers/AuthProvider";
+import type { CommutePlace, CommuteTrip, VehicleKind } from "./rideTracker";
+
+export type { CommutePlace, CommuteTrip, VehicleKind } from "./rideTracker";
 
 export type LogType = "oil" | "chain" | "fuel" | "service" | "odometer";
 export type OilCategory = "mineral" | "semi-synthetic" | "fully-synthetic" | "other";
@@ -30,7 +33,7 @@ export type ServiceLog = {
   amount?: number;
   unitPrice?: number;
   fullTank?: boolean;
-  source?: "camera" | "gallery" | "manual";
+  source?: "camera" | "gallery" | "manual" | "gps";
   oilCategory?: OilCategory;
   oilBrand?: string;
   oilViscosity?: string;
@@ -42,8 +45,13 @@ export type ServiceLog = {
 export type Vehicle = {
   id: string;
   name: string;
+  vehicleKind: VehicleKind;
   odometer: number;
   dailyCommute: number;
+  commuteTrips: CommuteTrip[];
+  commuteHome?: CommutePlace;
+  commuteWork?: CommutePlace;
+  autoCommuteTracking: boolean;
   oilType: string;
   oilCategory: OilCategory;
   oilBrand: string;
@@ -66,6 +74,7 @@ export type Garage = {
 export type VehicleInput = Pick<
   Vehicle,
   | "name"
+  | "vehicleKind"
   | "odometer"
   | "dailyCommute"
   | "oilType"
@@ -99,7 +108,10 @@ type RemoteGarage = {
 };
 
 const vehicleDefaults: Omit<Vehicle, "id" | "name" | "odometer"> = {
+  vehicleKind: "bike",
   dailyCommute: 20,
+  commuteTrips: [],
+  autoCommuteTracking: false,
   oilType: "Semi-synthetic",
   oilCategory: "semi-synthetic",
   oilBrand: "",
@@ -125,6 +137,8 @@ const createId = (prefix: string) =>
 export const createVehicle = (input: VehicleInput): Vehicle => ({
   id: createId("vehicle"),
   ...input,
+  commuteTrips: [],
+  autoCommuteTracking: false,
   chainLastServiced: input.odometer,
   logs: [
     {
@@ -215,6 +229,14 @@ const inferOilCategory = (oilType?: string): OilCategory => {
   return "other";
 };
 
+export const inferVehicleKind = (name?: string): VehicleKind => {
+  const normalized = name?.toLowerCase() ?? "";
+  if (/\b(?:car|civic|city|corolla|alto|mehran|cultus|swift|wagon|vitz|prius|yaris|toyota|hyundai|kia|sedan|hatchback|suv)\b/.test(normalized)) {
+    return "car";
+  }
+  return "bike";
+};
+
 const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name" | "odometer">): Vehicle => {
   const logs = sortLogsNewest(Array.isArray(vehicle.logs) ? vehicle.logs : []);
   const latestOilLog = logs.find((log) => log.type === "oil");
@@ -227,6 +249,9 @@ const normalizeVehicle = (vehicle: Partial<Vehicle> & Pick<Vehicle, "id" | "name
   return {
     ...vehicleDefaults,
     ...vehicle,
+    vehicleKind: vehicle.vehicleKind ?? inferVehicleKind(vehicle.name),
+    commuteTrips: Array.isArray(vehicle.commuteTrips) ? vehicle.commuteTrips : [],
+    autoCommuteTracking: Boolean(vehicle.autoCommuteTracking),
     logs,
     oilCategory: category,
     oilType: vehicle.oilType ?? oilCategoryLabel(category),

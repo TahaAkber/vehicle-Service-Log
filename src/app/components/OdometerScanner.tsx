@@ -55,8 +55,27 @@ const C = {
   red: "#FF647C",
 };
 
-const cleanNumber = (value: string) =>
-  Number(value.replace(/[^\d.,]/g, "").replace(/,/g, ""));
+const cleanNumber = (value: string) => parseLocalizedNumber(value);
+
+function parseLocalizedNumber(value: string) {
+  const cleaned = value.replace(/[^\d.,]/g, "");
+  if (!cleaned) return Number.NaN;
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastComma = cleaned.lastIndexOf(",");
+  const separatorIndex = Math.max(lastDot, lastComma);
+  if (separatorIndex < 0) return Number(cleaned);
+
+  const fractionLength = cleaned.length - separatorIndex - 1;
+  const separator = cleaned[separatorIndex];
+  const separatorCount = cleaned.split(separator).length - 1;
+  if (separator === "," && fractionLength === 3 && separatorCount === 1) {
+    return Number(cleaned.replace(/[.,]/g, ""));
+  }
+
+  const integer = cleaned.slice(0, separatorIndex).replace(/[.,]/g, "");
+  const fraction = cleaned.slice(separatorIndex + 1).replace(/[.,]/g, "");
+  return Number(fractionLength > 0 ? `${integer}.${fraction}` : integer);
+}
 
 const extractNumbers = (text: string) =>
   (text.match(/\d[\d,.]*/g) ?? [])
@@ -69,56 +88,101 @@ function parseOdometer(result: TextRecognitionResult, current: number) {
     .map((line) => ({ text: line.text, top: line.frame?.top ?? 99999 }))
     .sort((a, b) => a.top - b.top);
 
-  const candidates = lines.flatMap((line, lineIndex) =>
-    (line.text.match(/\d[\d\s,.]{2,}\d|\d{3,7}/g) ?? []).flatMap((token) => {
-      const digits = token.replace(/\D/g, "");
-      const rawValue = Number(digits);
-      const values = digits.length === 6 ? [rawValue / 10, rawValue] : [rawValue];
-      return values.map((value, variantIndex) => {
-        let score = digits.length >= 4 && digits.length <= 7 ? 6 : 0;
-        score += Math.max(0, 4 - lineIndex);
-        if (value >= current && value - current <= 5000) score += 6;
-        if (value < current) score -= 5;
-        if (current > 0 && value > current * 5) score -= 6;
-        if (/km|odo/i.test(line.text)) score += 5;
-        if (digits.length === 6 && variantIndex === 0) score += 2;
-        if (value > 9999999 || value < 1) score -= 8;
+  const candidates = lines.flatMap((line, lineIndex) => {
+    const isOdometerLine = /\b(?:odo(?:meter)?|total)\b|\bkm\b/i.test(line.text);
+    const isDistractor = /\b(?:trip|range|avg|average|clock|time|temp|cons|fuel|date)\b/i.test(line.text);
+    const looksLikeDateOrTime = /\d{1,4}\s*[:/-]\s*\d{1,2}/.test(line.text);
+    return (line.text.match(/\d(?:[\d\s]*\d)?(?:[.,]\d+)?/g) ?? []).flatMap((token) => {
+      const compact = token.replace(/\s/g, "");
+      const digits = compact.replace(/\D/g, "");
+      const rawValue = parseLocalizedNumber(compact);
+      const values = digits.length === 6 && !/[.,]/.test(compact)
+        ? [rawValue, rawValue / 10]
+        : [rawValue];
+
+      return values.map((value) => {
+        let score = digits.length >= 4 && digits.length <= 7 ? 6 : -7;
+        if (isOdometerLine) score += 9;
+        if (isDistractor) score -= 12;
+        if (looksLikeDateOrTime) score -= 12;
+        if (value >= current && value - current <= 5000) score += 8;
+        if (current > 0 && value >= current) score += Math.max(0, 4 - (value - current) / 500);
+        if (current > 0 && value < current) score -= 14;
+        if (current > 0 && value - current > 5000) score -= 8;
+        if (current > 0 && value > current * 3) score -= 8;
+        if (lineIndex < 4) score += 1;
+        if (value > 9_999_999 || value < 1) score -= 20;
         return { value: Number(value.toFixed(1)), score };
       });
-    }),
-  );
+    });
+  });
 
-  return candidates.sort((a, b) => b.score - a.score)[0]?.value;
-}
-
-function valueNearKeywords(result: TextRecognitionResult, keywords: RegExp) {
-  const lines = result.blocks.flatMap((block) => block.lines.map((line) => line.text));
-  for (let index = 0; index < lines.length; index += 1) {
-    if (!keywords.test(lines[index])) continue;
-    const own = extractNumbers(lines[index]);
-    if (own.length) return own[own.length - 1];
-    const next = extractNumbers(lines[index + 1] ?? "");
-    if (next.length) return next[0];
-  }
-  return undefined;
+  const best = candidates.sort((a, b) => b.score - a.score)[0];
+  if (!best || best.score < (current > 0 ? 7 : 9)) return undefined;
+  return best.value;
 }
 
 function parseFuel(result: TextRecognitionResult) {
-  let amount = valueNearKeywords(result, /amount|sale|total|rs\.?|pkr/i);
-  let liters = valueNearKeywords(result, /lit(?:er|re)?s?|volume|qty|quantity/i);
-  let unitPrice = valueNearKeywords(result, /rate|unit\s*price|price\s*\/\s*l/i);
+  const lines = result.blocks.flatMap((block) => block.lines.map((line) => line.text));
+  const amountLabel = /\b(?:amount|sale|total|payable|pkr)\b/i;
+  const litersLabel = /\b(?:lit(?:er|re)s?|volume|qty|quantity)\b/i;
+  const rateLabel = /\b(?:rate|unit\s*price)\b|price\s*(?:\/|per)\s*l/i;
 
-  const all = extractNumbers(result.text).filter((value) => value > 0);
-  if (!amount) amount = all.find((value) => value >= 100);
-  if (!liters) liters = all.find((value) => value > 0 && value < 100);
-  if (!unitPrice) {
-    unitPrice = all.find((value) => value >= 100 && value < 1000 && value !== amount);
+  const validFor = (kind: "amount" | "liters" | "rate", value: number) => {
+    if (kind === "amount") return value >= 50 && value <= 100_000;
+    if (kind === "liters") return value >= 0.1 && value <= 500;
+    return value >= 20 && value <= 5_000;
+  };
+
+  const nearLabel = (label: RegExp, kind: "amount" | "liters" | "rate") => {
+    for (let index = 0; index < lines.length; index += 1) {
+      if (!label.test(lines[index])) continue;
+      for (const nearbyIndex of [index, index - 1, index + 1, index - 2, index + 2]) {
+        if (nearbyIndex < 0 || nearbyIndex >= lines.length) continue;
+        const values = extractNumbers(lines[nearbyIndex]).filter((value) => validFor(kind, value));
+        if (values.length) return values[values.length - 1];
+      }
+    }
+    return undefined;
+  };
+
+  let amount = nearLabel(amountLabel, "amount");
+  let liters = nearLabel(litersLabel, "liters");
+  let unitPrice = nearLabel(rateLabel, "rate");
+  const all = [...new Set(extractNumbers(result.text).filter((value) => value > 0))];
+
+  // Unlabelled displays are accepted only when all three values agree mathematically.
+  if (!amount || !liters || !unitPrice) {
+    let best: { amount: number; liters: number; unitPrice: number; error: number } | undefined;
+    for (const amountCandidate of all.filter((value) => validFor("amount", value))) {
+      for (const litersCandidate of all.filter((value) => validFor("liters", value))) {
+        for (const rateCandidate of all.filter((value) => validFor("rate", value))) {
+          if (new Set([amountCandidate, litersCandidate, rateCandidate]).size < 3) continue;
+          const error = Math.abs(amountCandidate - litersCandidate * rateCandidate) / amountCandidate;
+          if (error <= 0.08 && (!best || error < best.error)) {
+            best = { amount: amountCandidate, liters: litersCandidate, unitPrice: rateCandidate, error };
+          }
+        }
+      }
+    }
+    if (best) {
+      amount ??= best.amount;
+      liters ??= best.liters;
+      unitPrice ??= best.unitPrice;
+    }
   }
 
-  if (!liters && amount && unitPrice) liters = amount / unitPrice;
-  if (!amount && liters && unitPrice) amount = liters * unitPrice;
-  if (!unitPrice && amount && liters) unitPrice = amount / liters;
+  const known = [amount, liters, unitPrice].filter((value) => value !== undefined).length;
+  if (known >= 2) {
+    if (!liters && amount && unitPrice) liters = amount / unitPrice;
+    if (!amount && liters && unitPrice) amount = liters * unitPrice;
+    if (!unitPrice && amount && liters) unitPrice = amount / liters;
+  }
 
+  if (amount && liters && unitPrice) {
+    const error = Math.abs(amount - liters * unitPrice) / amount;
+    if (error > 0.1) return {};
+  }
   return { amount, liters, unitPrice };
 }
 
@@ -170,6 +234,7 @@ function SmartScanner({
   const [step, setStep] = useState<ScannerStep>("choose");
   const [source, setSource] = useState<ScanSource>("manual");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [odometer, setOdometer] = useState(String(currentOdometer));
@@ -192,6 +257,9 @@ function SmartScanner({
         else Alert.alert("Reading unclear", "OCR could not detect the reading. Enter the value manually.");
       } else {
         const detected = parseFuel(result);
+        setAmount("");
+        setLiters("");
+        setUnitPrice("");
         if (detected.amount) setAmount(detected.amount.toFixed(2));
         if (detected.liters) setLiters(detected.liters.toFixed(3));
         if (detected.unitPrice) setUnitPrice(detected.unitPrice.toFixed(2));
@@ -235,6 +303,7 @@ function SmartScanner({
 
   const openCamera = async () => {
     if (!permission) return;
+    setIsCameraReady(false);
     if (!permission.granted) {
       if (!permission.canAskAgain) {
         setStep("camera");
@@ -250,9 +319,14 @@ function SmartScanner({
   };
 
   const capture = async () => {
-    if (!cameraRef.current || isProcessing) return;
-    const photo = await cameraRef.current.takePictureAsync({ quality: 0.9, skipProcessing: false });
-    if (photo?.uri) await processImage(photo.uri, "camera");
+    if (!cameraRef.current || !isCameraReady || isProcessing) return;
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1, skipProcessing: false });
+      if (photo?.uri) await processImage(photo.uri, "camera");
+    } catch (error) {
+      console.error("Camera capture error", error);
+      Alert.alert("Could not take photo", "Wait for the camera to focus, then try again.");
+    }
   };
 
   const useManual = () => {
@@ -299,6 +373,22 @@ function SmartScanner({
     if (!hasAmount) parsedAmount = parsedLiters * parsedRate;
     if (!hasRate) parsedRate = parsedAmount / parsedLiters;
 
+    if (parsedOdometer < currentOdometer) {
+      Alert.alert(
+        "Reading cannot decrease",
+        `The current saved odometer is ${currentOdometer.toLocaleString()} km.`,
+      );
+      return;
+    }
+    const fuelMathError = Math.abs(parsedAmount - parsedLiters * parsedRate) / parsedAmount;
+    if (fuelMathError > 0.1) {
+      Alert.alert(
+        "Fuel values do not match",
+        "Amount should be close to liters × price per liter. Correct the scanned values before saving.",
+      );
+      return;
+    }
+
     onFuelSuccess?.({
       odometer: Number(parsedOdometer.toFixed(1)),
       amount: Number(parsedAmount.toFixed(2)),
@@ -335,7 +425,14 @@ function SmartScanner({
     return (
       <View style={styles.cameraContainer}>
         <StatusBar style="light" />
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing="back"
+          mode="picture"
+          onCameraReady={() => setIsCameraReady(true)}
+          onMountError={({ message }) => Alert.alert("Camera unavailable", message)}
+        />
         <SafeAreaView style={styles.cameraOverlay}>
           <View style={styles.cameraHeader}>
             <Pressable style={styles.roundButton} onPress={() => setStep("choose")}>
@@ -352,8 +449,12 @@ function SmartScanner({
           </View>
           <View style={styles.captureArea}>
             <Text style={styles.cameraHint}>{mode === "odometer" ? "Keep the total odometer clear and straight" : "Make sure the amount, liters, and price are visible"}</Text>
-            <Pressable style={styles.captureOuter} onPress={capture} disabled={isProcessing}>
-              {isProcessing ? <ActivityIndicator color="#FFFFFF" /> : <View style={styles.captureInner} />}
+            <Pressable
+              style={[styles.captureOuter, !isCameraReady && styles.captureDisabled]}
+              onPress={capture}
+              disabled={isProcessing || !isCameraReady}
+            >
+              {isProcessing || !isCameraReady ? <ActivityIndicator color="#FFFFFF" /> : <View style={styles.captureInner} />}
             </Pressable>
           </View>
         </SafeAreaView>
@@ -482,6 +583,7 @@ const styles = StyleSheet.create({
   captureArea: { alignItems: "center", paddingBottom: 25 },
   cameraHint: { marginBottom: 16, color: "#FFFFFF", fontSize: 11, fontWeight: "700", textAlign: "center" },
   captureOuter: { width: 72, height: 72, borderRadius: 38, borderWidth: 4, borderColor: "#FFFFFF", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.25)" },
+  captureDisabled: { opacity: 0.55 },
   captureInner: { width: 54, height: 54, borderRadius: 28, backgroundColor: "#FFFFFF" },
   permissionTitle: { marginTop: 16, color: C.text, fontSize: 20, fontWeight: "900" },
   permissionText: { maxWidth: 290, marginTop: 8, color: C.muted, fontSize: 12, lineHeight: 19, textAlign: "center" },

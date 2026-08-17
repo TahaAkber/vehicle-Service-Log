@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 
 import { VehicleStoreProvider } from "./data/vehicleStore";
 import { AuthProvider, useAuth } from "../providers/AuthProvider";
+import "./data/rideTracker";
 
 function RootNavigator() {
   const { session, isLoading, isRecovery } = useAuth();

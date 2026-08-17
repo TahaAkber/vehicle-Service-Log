@@ -20,11 +20,13 @@ import type {
   RidingCondition,
   ServiceLog,
   Vehicle,
+  VehicleKind,
   VehicleInput,
 } from "../data/vehicleStore";
 import {
   getHealth,
   getOilHealth,
+  inferVehicleKind,
   oilCategoryLabel,
   ridingConditionLabel,
 } from "../data/vehicleStore";
@@ -57,6 +59,11 @@ const ridingConditionOptions: { value: RidingCondition; label: string }[] = [
   { value: "heavy-traffic", label: "Heavy traffic" },
   { value: "dusty", label: "Dusty roads" },
   { value: "long-distance", label: "Long distance" },
+];
+
+const vehicleKindOptions: { value: VehicleKind; label: string }[] = [
+  { value: "bike", label: "Bike" },
+  { value: "car", label: "Car" },
 ];
 
 function OptionChips<T extends string>({
@@ -226,7 +233,7 @@ export function GarageSheet({
               onPress={() => onSelect(vehicle.id)}
             >
               <View style={[styles.vehicleAvatar, selected && styles.vehicleAvatarSelected]}>
-                <Ionicons name="bicycle-outline" size={22} color={selected ? C.cyan : C.muted} />
+                <Ionicons name={vehicle.vehicleKind === "bike" ? "bicycle-outline" : "car-outline"} size={22} color={selected ? C.cyan : C.muted} />
               </View>
               <View style={styles.rowCopy}>
                 <Text style={styles.rowTitle}>{vehicle.name}</Text>
@@ -307,6 +314,10 @@ type VehicleFormSheetProps = {
 
 export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleFormSheetProps) {
   const [name, setName] = useState(vehicle?.name ?? "");
+  const [vehicleKind, setVehicleKind] = useState<VehicleKind>(
+    vehicle?.vehicleKind ?? inferVehicleKind(vehicle?.name),
+  );
+  const [kindManuallySelected, setKindManuallySelected] = useState(Boolean(vehicle));
   const [odometer, setOdometer] = useState(String(vehicle?.odometer ?? ""));
   const [dailyCommute, setDailyCommute] = useState(String(vehicle?.dailyCommute ?? 20));
   const [oilCategory, setOilCategory] = useState<OilCategory>(vehicle?.oilCategory ?? "semi-synthetic");
@@ -326,6 +337,8 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
   useEffect(() => {
     if (!visible) return;
     setName(vehicle?.name ?? "");
+    setVehicleKind(vehicle?.vehicleKind ?? inferVehicleKind(vehicle?.name));
+    setKindManuallySelected(Boolean(vehicle));
     setOdometer(String(vehicle?.odometer ?? ""));
     setDailyCommute(String(vehicle?.dailyCommute ?? 20));
     setOilCategory(vehicle?.oilCategory ?? "semi-synthetic");
@@ -384,6 +397,7 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
 
     onSave({
       name: name.trim(),
+      vehicleKind,
       odometer: Number(parsedOdometer.toFixed(1)),
       dailyCommute: Math.round(parsedCommute),
       oilType: oilCategoryLabel(oilCategory),
@@ -411,7 +425,24 @@ export function VehicleFormSheet({ visible, vehicle, onClose, onSave }: VehicleF
         contentContainerStyle={styles.formContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Field label="VEHICLE NAME" value={name} onChangeText={setName} placeholder="e.g. Honda Civic 2020" />
+        <Field
+          label="VEHICLE NAME"
+          value={name}
+          onChangeText={(value) => {
+            setName(value);
+            if (!kindManuallySelected) setVehicleKind(inferVehicleKind(value));
+          }}
+          placeholder="e.g. Honda CD 70 or Civic"
+        />
+        <Text style={styles.fieldLabel}>VEHICLE TYPE</Text>
+        <OptionChips
+          options={vehicleKindOptions}
+          value={vehicleKind}
+          onChange={(value) => {
+            setVehicleKind(value);
+            setKindManuallySelected(true);
+          }}
+        />
         <View style={styles.twoColumns}>
           <Field
             compact

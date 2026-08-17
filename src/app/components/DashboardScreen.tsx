@@ -149,6 +149,9 @@ export default function DashboardScreen() {
     vehicle.chainInterval,
   );
   const formattedOdometer = new Intl.NumberFormat("en-US").format(vehicle.odometer);
+  const todayGpsDistance = vehicle.commuteTrips
+    .filter((trip) => new Date(trip.startedAt).toDateString() === new Date().toDateString())
+    .reduce((sum, trip) => sum + trip.distanceKm, 0);
   const oilIsTimeLimited = oilHealth.limitingFactor === "time" && oilHealth.percent <= chainHealth.percent;
   const nextServiceDistance = Math.min(oilHealth.remaining, chainHealth.remaining);
   const nextServiceAt = new Intl.NumberFormat("en-US").format(
@@ -393,7 +396,7 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.monthRow}>
             <Ionicons name="flash" size={17} color="#FDE68A" />
-            <Text style={styles.monthText}>+{vehicle.dailyCommute} km daily target</Text>
+            <Text style={styles.monthText}>+{todayGpsDistance.toFixed(1)} km tracked today</Text>
             <View style={styles.commuteDivider} />
             <Text style={styles.commuteText}>Daily commute</Text>
           </View>
