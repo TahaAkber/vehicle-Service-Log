@@ -27,6 +27,7 @@ import {
 } from "../data/rideTracker";
 import { createLogId, sortLogsNewest, useVehicleStore } from "../data/vehicleStore";
 import EmptyGarageScreen from "./EmptyGarageScreen";
+import LocationSearchSheet from "./LocationSearchSheet";
 import RideMap from "./RideMap";
 
 const C = {
@@ -49,8 +50,8 @@ const sameLocalDay = (isoDate: string, now = new Date()) => {
 };
 
 const directionMeta = {
-  outbound: { label: "Jana", icon: "arrow-forward-outline" as const, color: C.cyan },
-  return: { label: "Wapsi", icon: "arrow-back-outline" as const, color: C.green },
+  outbound: { label: "Outbound", icon: "arrow-forward-outline" as const, color: C.cyan },
+  return: { label: "Return", icon: "arrow-back-outline" as const, color: C.green },
   other: { label: "Other trip", icon: "navigate-outline" as const, color: C.amber },
 };
 
@@ -66,6 +67,7 @@ export default function RideTrackerScreen() {
   const { garage, activeVehicle: vehicle, isLoading, updateVehicle } = useVehicleStore();
   const [activeRide, setActiveRide] = useState<ActiveRide | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+  const [searchKind, setSearchKind] = useState<"home" | "work" | null>(null);
   const [, setClock] = useState(0);
 
   const storeDetectedTrip = useCallback((trip: CommuteTrip) => {
@@ -188,20 +190,10 @@ export default function RideTrackerScreen() {
     }
   };
 
-  const saveCurrentPlace = async (kind: "home" | "work") => {
+  const savePlace = async (kind: "home" | "work", place: CommutePlace) => {
+    setSearchKind(null);
     setIsWorking(true);
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) throw new Error("Location permission was not granted.");
-      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const addresses = await Location.reverseGeocodeAsync(location.coords).catch(() => []);
-      const address = addresses[0];
-      const fallback = kind === "home" ? "Home" : "Work";
-      const place: CommutePlace = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-        label: address?.formattedAddress ?? address?.name ?? fallback,
-      };
       const home = kind === "home" ? place : vehicle.commuteHome;
       const work = kind === "work" ? place : vehicle.commuteWork;
       updateVehicle(vehicle.id, (current) => ({
@@ -219,7 +211,7 @@ export default function RideTrackerScreen() {
           work,
         });
       }
-      Alert.alert(`${fallback} saved`, place.label);
+      Alert.alert(`${kind === "home" ? "Home" : "Work"} saved`, place.label);
     } catch (error) {
       Alert.alert("Could not save location", error instanceof Error ? error.message : "Try again outdoors.");
     } finally {
@@ -304,8 +296,8 @@ export default function RideTrackerScreen() {
         <Text style={styles.sectionTitle}>Today</Text>
         <View style={styles.summaryRow}>
           <Summary label="TOTAL" value={todayDistance} color={C.cyan} />
-          <Summary label="JANA" value={goingDistance} color={C.amber} />
-          <Summary label="WAPSI" value={returnDistance} color={C.green} />
+          <Summary label="OUTBOUND" value={goingDistance} color={C.amber} />
+          <Summary label="RETURN" value={returnDistance} color={C.green} />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -315,17 +307,28 @@ export default function RideTrackerScreen() {
           </Pressable>
         </View>
         <View style={styles.placeCard}>
-          <PlaceRow kind="home" place={vehicle.commuteHome} onPress={() => void saveCurrentPlace("home")} />
+          <PlaceRow kind="home" place={vehicle.commuteHome} onPress={() => setSearchKind("home")} />
           <View style={styles.placeDivider} />
-          <PlaceRow kind="work" place={vehicle.commuteWork} onPress={() => void saveCurrentPlace("work")} />
+          <PlaceRow kind="work" place={vehicle.commuteWork} onPress={() => setSearchKind("work")} />
         </View>
-        <Text style={styles.helper}>Leave Home or Work to start automatically. Reaching the opposite location classifies the trip as jana or wapsi.</Text>
+        <Text style={styles.helper}>Leave Home or Work to start automatically. Reaching the opposite location classifies the trip as outbound or return.</Text>
 
         <Text style={styles.sectionTitle}>Recent trips</Text>
         {vehicle.commuteTrips.length ? vehicle.commuteTrips.slice(0, 8).map((trip) => <TripRow key={trip.id} trip={trip} />) : (
           <View style={styles.empty}><Ionicons name="map-outline" size={28} color={C.muted} /><Text style={styles.emptyText}>Your detected rides will appear here.</Text></View>
         )}
       </ScrollView>
+      {searchKind ? (
+        <LocationSearchSheet
+          visible
+          kind={searchKind}
+          initialPlace={searchKind === "home" ? vehicle.commuteHome : vehicle.commuteWork}
+          home={vehicle.commuteHome}
+          work={vehicle.commuteWork}
+          onClose={() => setSearchKind(null)}
+          onSelect={(place) => void savePlace(searchKind, place)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -353,7 +356,7 @@ function TripRow({ trip }: { trip: CommuteTrip }) {
     <View style={styles.tripRow}>
       <View style={[styles.tripIcon, { backgroundColor: `${meta.color}18` }]}><Ionicons name={meta.icon} size={19} color={meta.color} /></View>
       <View style={styles.tripCopy}><Text style={styles.tripTitle}>{meta.label}</Text><Text style={styles.tripMeta}>{new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", hour: "numeric", minute: "2-digit" }).format(new Date(trip.startedAt))} · {formatDuration(trip.startedAt, trip.endedAt)}</Text></View>
-      <View style={styles.tripRight}><Text style={styles.tripDistance}>{trip.distanceKm.toFixed(2)} km</Text><Text style={styles.tripApplied}>{trip.odometerApplied ? "Added to odo" : "GPS only"}</Text></View>
+      <View style={styles.tripRight}><Text style={styles.tripDistance}>{trip.distanceKm.toFixed(2)} km</Text><Text style={styles.tripApplied}>{trip.odometerApplied ? "Added to odometer" : "GPS only"}</Text></View>
     </View>
   );
 }
