@@ -18,11 +18,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "android.permission.CAMERA"
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
       ],
-      "blockedPermissions": [
-        "android.permission.RECORD_AUDIO"
-      ],
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "package": "com.anonymous.vehicleServiceLog"
     },
     "web": {
