@@ -73,7 +73,10 @@ const createRideId = () =>
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 
-export function distanceMeters(a: Pick<RoutePoint, "latitude" | "longitude">, b: Pick<RoutePoint, "latitude" | "longitude">) {
+export function distanceMeters(
+  a: Pick<RoutePoint, "latitude" | "longitude">,
+  b: Pick<RoutePoint, "latitude" | "longitude">,
+) {
   const earthRadius = 6_371_000;
   const latitudeDelta = radians(b.latitude - a.latitude);
   const longitudeDelta = radians(b.longitude - a.longitude);
@@ -81,7 +84,9 @@ export function distanceMeters(a: Pick<RoutePoint, "latitude" | "longitude">, b:
   const latitudeB = radians(b.latitude);
   const value =
     Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(latitudeA) * Math.cos(latitudeB) * Math.sin(longitudeDelta / 2) ** 2;
+    Math.cos(latitudeA) *
+      Math.cos(latitudeB) *
+      Math.sin(longitudeDelta / 2) ** 2;
   return earthRadius * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
 }
 
@@ -91,12 +96,17 @@ const zoneForPoint = (
   work?: CommutePlace,
 ): CommuteZone => {
   if (!point) return "other";
-  if (home && distanceMeters(point, home) <= GEOFENCE_RADIUS_METERS * 1.5) return "home";
-  if (work && distanceMeters(point, work) <= GEOFENCE_RADIUS_METERS * 1.5) return "work";
+  if (home && distanceMeters(point, home) <= GEOFENCE_RADIUS_METERS * 1.5)
+    return "home";
+  if (work && distanceMeters(point, work) <= GEOFENCE_RADIUS_METERS * 1.5)
+    return "work";
   return "other";
 };
 
-const directionForZones = (start: CommuteZone, end: CommuteZone): CommuteDirection => {
+const directionForZones = (
+  start: CommuteZone,
+  end: CommuteZone,
+): CommuteDirection => {
   if (start === "home" && end === "work") return "outbound";
   if (start === "work" && end === "home") return "return";
   return "other";
@@ -110,7 +120,7 @@ const toRoutePoint = (location: Location.LocationObject): RoutePoint => ({
   speed: location.coords.speed ?? undefined,
 });
 
-const readJson = async <T,>(key: string): Promise<T | null> => {
+const readJson = async <T>(key: string): Promise<T | null> => {
   const value = await AsyncStorage.getItem(key);
   if (!value) return null;
   try {
@@ -137,7 +147,10 @@ const appendLocations = async (locations: Location.LocationObject[]) => {
     const previous = route[route.length - 1];
     if (previous) {
       const segment = distanceMeters(previous, point);
-      const seconds = Math.max(1, (point.timestamp - previous.timestamp) / 1000);
+      const seconds = Math.max(
+        1,
+        (point.timestamp - previous.timestamp) / 1000,
+      );
       const calculatedSpeed = segment / seconds;
       const maximumSpeed = ride.vehicleKind === "bike" ? 55 : 75;
       if (segment < 3 || calculatedSpeed > maximumSpeed) continue;
@@ -147,22 +160,35 @@ const appendLocations = async (locations: Location.LocationObject[]) => {
     route.push(point);
   }
 
-  const compactRoute = route.length > 600
-    ? route.filter((_, index) => index % 2 === 0 || index === route.length - 1)
-    : route;
-  await saveActiveRide({ ...ride, route: compactRoute, distanceKm: Number(distanceKm.toFixed(3)) });
+  const compactRoute =
+    route.length > 600
+      ? route.filter(
+          (_, index) => index % 2 === 0 || index === route.length - 1,
+        )
+      : route;
+  await saveActiveRide({
+    ...ride,
+    route: compactRoute,
+    distanceKm: Number(distanceKm.toFixed(3)),
+  });
 };
 
 const enqueueCompletedTrip = async (trip: CommuteTrip) => {
   const existing = (await readJson<CommuteTrip[]>(COMPLETED_RIDES_KEY)) ?? [];
   if (existing.some((item) => item.id === trip.id)) return;
-  await AsyncStorage.setItem(COMPLETED_RIDES_KEY, JSON.stringify([...existing, trip]));
+  await AsyncStorage.setItem(
+    COMPLETED_RIDES_KEY,
+    JSON.stringify([...existing, trip]),
+  );
 };
 
 const compactCompletedRoute = (route: RoutePoint[]) => {
   if (route.length <= 140) return route;
   const step = Math.ceil(route.length / 140);
-  return route.filter((_, index) => index === 0 || index === route.length - 1 || index % step === 0);
+  return route.filter(
+    (_, index) =>
+      index === 0 || index === route.length - 1 || index % step === 0,
+  );
 };
 
 export async function consumeCompletedTrips() {
@@ -172,13 +198,18 @@ export async function consumeCompletedTrips() {
 }
 
 const beginRide = async (
-  config: Pick<ActiveRide, "vehicleId" | "vehicleName" | "vehicleKind" | "automatic" | "home" | "work">,
+  config: Pick<
+    ActiveRide,
+    "vehicleId" | "vehicleName" | "vehicleKind" | "automatic" | "home" | "work"
+  >,
   initialLocation?: Location.LocationObject,
   startZone?: CommuteZone,
 ) => {
   const existing = await getActiveRide();
   if (existing) return existing;
-  const firstPoint = initialLocation ? toRoutePoint(initialLocation) : undefined;
+  const firstPoint = initialLocation
+    ? toRoutePoint(initialLocation)
+    : undefined;
   const ride: ActiveRide = {
     ...config,
     id: createRideId(),
@@ -213,9 +244,11 @@ const startNativeLocationUpdates = async () => {
 
 export async function requestRidePermissions() {
   const foreground = await Location.requestForegroundPermissionsAsync();
-  if (!foreground.granted) return { granted: false, reason: "foreground" as const };
+  if (!foreground.granted)
+    return { granted: false, reason: "foreground" as const };
   const background = await Location.requestBackgroundPermissionsAsync();
-  if (!background.granted) return { granted: false, reason: "background" as const };
+  if (!background.granted)
+    return { granted: false, reason: "background" as const };
   return { granted: true, reason: undefined };
 }
 
@@ -227,9 +260,19 @@ export async function startRide(config: {
   work?: CommutePlace;
   automatic?: boolean;
 }) {
-  const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-  const ride = await beginRide({ ...config, automatic: Boolean(config.automatic) }, location);
-  await startNativeLocationUpdates();
+  const location = await Location.getCurrentPositionAsync({
+    accuracy: Location.Accuracy.High,
+  });
+  const ride = await beginRide(
+    { ...config, automatic: Boolean(config.automatic) },
+    location,
+  );
+  console.log("START RIDE: ride saved");
+
+  // TEMPORARILY COMMENT THIS
+  // await startNativeLocationUpdates();
+
+  console.log("START RIDE: completed");
   return ride;
 }
 
@@ -237,7 +280,9 @@ export async function finishRide() {
   const ride = await getActiveRide();
   if (!ride) return null;
   try {
-    const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.High,
+    });
     await appendLocations([location]);
   } catch {
     // The accumulated background route is still valid if the final fix is unavailable.
@@ -247,7 +292,8 @@ export async function finishRide() {
     await Location.stopLocationUpdatesAsync(RIDE_LOCATION_TASK);
   }
   await AsyncStorage.removeItem(ACTIVE_RIDE_KEY);
-  if (completedRide.distanceKm < 0.05 || completedRide.route.length < 2) return null;
+  if (completedRide.distanceKm < 0.05 || completedRide.route.length < 2)
+    return null;
 
   const endZone = zoneForPoint(
     completedRide.route[completedRide.route.length - 1],
@@ -284,35 +330,49 @@ export async function setAutoTracking(config: AutoTrackingConfig | null) {
 }
 
 if (!TaskManager.isTaskDefined(RIDE_LOCATION_TASK)) {
-  TaskManager.defineTask<LocationTaskData>(RIDE_LOCATION_TASK, async ({ data, error }) => {
-    if (error || !data?.locations?.length) return;
-    await appendLocations(data.locations);
-  });
+  TaskManager.defineTask<LocationTaskData>(
+    RIDE_LOCATION_TASK,
+    async ({ data, error }) => {
+      if (error || !data?.locations?.length) return;
+      await appendLocations(data.locations);
+    },
+  );
 }
 
 if (!TaskManager.isTaskDefined(COMMUTE_GEOFENCE_TASK)) {
-  TaskManager.defineTask<GeofenceTaskData>(COMMUTE_GEOFENCE_TASK, async ({ data, error }) => {
-    if (error || !data?.region?.identifier || data.eventType === undefined) return;
-    const config = await readJson<AutoTrackingConfig>(AUTO_CONFIG_KEY);
-    if (!config?.enabled) return;
-    const zone = data.region.identifier === "home" ? "home" : "work";
+  TaskManager.defineTask<GeofenceTaskData>(
+    COMMUTE_GEOFENCE_TASK,
+    async ({ data, error }) => {
+      if (error || !data?.region?.identifier || data.eventType === undefined)
+        return;
+      const config = await readJson<AutoTrackingConfig>(AUTO_CONFIG_KEY);
+      if (!config?.enabled) return;
+      const zone = data.region.identifier === "home" ? "home" : "work";
 
-    if (data.eventType === Location.GeofencingEventType.Exit && !(await getActiveRide())) {
-      await beginRide({
-        vehicleId: config.vehicleId,
-        vehicleName: config.vehicleName,
-        vehicleKind: config.vehicleKind,
-        automatic: true,
-        home: config.home,
-        work: config.work,
-      }, undefined, zone);
-      await startNativeLocationUpdates();
-      return;
-    }
+      if (
+        data.eventType === Location.GeofencingEventType.Exit &&
+        !(await getActiveRide())
+      ) {
+        await beginRide(
+          {
+            vehicleId: config.vehicleId,
+            vehicleName: config.vehicleName,
+            vehicleKind: config.vehicleKind,
+            automatic: true,
+            home: config.home,
+            work: config.work,
+          },
+          undefined,
+          zone,
+        );
+        await startNativeLocationUpdates();
+        return;
+      }
 
-    if (data.eventType === Location.GeofencingEventType.Enter) {
-      const ride = await getActiveRide();
-      if (ride && ride.distanceKm >= 0.2) await finishRide();
-    }
-  });
+      if (data.eventType === Location.GeofencingEventType.Enter) {
+        const ride = await getActiveRide();
+        if (ride && ride.distanceKm >= 0.2) await finishRide();
+      }
+    },
+  );
 }
