@@ -267,12 +267,7 @@ export async function startRide(config: {
     { ...config, automatic: Boolean(config.automatic) },
     location,
   );
-  console.log("START RIDE: ride saved");
-
-  // TEMPORARILY COMMENT THIS
-  // await startNativeLocationUpdates();
-
-  console.log("START RIDE: completed");
+  await startNativeLocationUpdates();
   return ride;
 }
 

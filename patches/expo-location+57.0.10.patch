@@ -1,0 +1,50 @@
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+index 0019485..cd79dec 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/services/LocationTaskService.kt
+@@ -37,6 +37,10 @@ class LocationTaskService : Service() {
+     if (extras != null) {
+       mChannelId = extras.getString("appId") + ":" + extras.getString("taskName")
+       mKillService = extras.getBoolean("killService", false)
++      mParentContext = applicationContext
++      extras.getBundle("serviceOptions")?.let { serviceOptions ->
++        startForeground(serviceOptions)
++      }
+     }
+     return START_REDELIVER_INTENT
+   }
+diff --git a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+index b4f6c06..e466e06 100644
+--- a/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
++++ b/node_modules/expo-location/android/src/main/java/expo/modules/location/taskConsumers/LocationTaskConsumer.kt
+@@ -55,6 +55,10 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+ 
+   override fun didRegister(task: TaskInterface) {
+     mTask = task
++    if (shouldUseForegroundService(task.options) && !AppForegroundedSingleton.isForegrounded) {
++      Log.w(TAG, "Deferring foreground location task until the app resumes")
++      return
++    }
+     startLocationUpdates()
+     maybeStartForegroundService()
+   }
+@@ -210,6 +214,7 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+       extras.putString("appId", task.appScopeKey)
+       extras.putString("taskName", task.name)
+       extras.putBoolean("killService", serviceOptions.getBoolean("killServiceOnDestroy", false))
++      extras.putBundle("serviceOptions", serviceOptions)
+       serviceIntent.putExtras(extras)
+       context.startForegroundService(serviceIntent)
+       context.bindService(
+@@ -338,6 +343,11 @@ class LocationTaskConsumer(context: Context, taskManagerUtils: TaskManagerUtilsI
+ 
+   override fun onHostResume() {
+     mIsHostPaused = false
++    val task = mTask
++    if (task != null && shouldUseForegroundService(task.options) && mService == null) {
++      startLocationUpdates()
++      maybeStartForegroundService()
++    }
+     maybeReportDeferredLocations()
+   }
+ 
